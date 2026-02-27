@@ -42,24 +42,7 @@
   },
   "plugins": {
     "shell": {
-      "open": false,
-      "scope": [
-        {
-          "name": "nmcli",
-          "cmd": "nmcli",
-          "args": true
-        },
-        {
-          "name": "rfkill",
-          "cmd": "rfkill",
-          "args": true
-        },
-        {
-          "name": "tailscale",
-          "cmd": "tailscale",
-          "args": ["status", "--json"]
-        }
-      ]
+      "open": false
     }
   }
 }
