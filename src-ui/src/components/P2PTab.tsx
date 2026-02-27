@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'preact/hooks';
+import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { PeerDevice, P2PConfig, DeviceStatus, ConnectionType, PairRequest } from '../App';
@@ -47,38 +47,16 @@ export function P2PTab() {
     }
   }, []);
 
-  const checkOpenclawStatus = useCallback(async (peers: PeerDevice[], statusMap: Map<string, DeviceStatus>) => {
-    const results = new Set<string>();
-    for (const peer of peers) {
-      if (peer.is_trusted && statusMap.get(peer.id) === 'Online') {
-        try {
-          const running = await invoke<boolean>('check_openclaw_status', { peer });
-          if (running) {
-            results.add(peer.id);
-          }
-        } catch {
-          // Silently skip — peer may not be reachable for SSH
-        }
-      }
-    }
-    setOpenclawPeers(results);
-  }, []);
-
   const checkStatuses = useCallback(async () => {
     try {
       const statuses = await invoke<[string, DeviceStatus][]>('check_all_peers');
       const map = new Map<string, DeviceStatus>();
       statuses.forEach(([id, status]) => map.set(id, status));
       setPeerStatuses(map);
-
-      // Check OpenClaw status for online+trusted peers
-      if (config) {
-        checkOpenclawStatus(config.peers, map);
-      }
     } catch (e) {
       toast.error('Failed to check peer statuses');
     }
-  }, [config, checkOpenclawStatus]);
+  }, []);
 
   const loadPairRequests = useCallback(async () => {
     try {
@@ -88,6 +66,31 @@ export function P2PTab() {
       // Silent — pair requests polling failure is expected during startup
     }
   }, []);
+
+  // OpenClaw detection — separate from status polling to avoid heavy SSH on every cycle
+  const checkingOpenclawRef = useRef(false);
+  const checkOpenclawStatus = useCallback(async () => {
+    if (!config || checkingOpenclawRef.current) return;
+    checkingOpenclawRef.current = true;
+    try {
+      const results = new Set<string>();
+      for (const peer of config.peers) {
+        if (peer.is_trusted && peerStatuses.get(peer.id) === 'Online') {
+          try {
+            const running = await invoke<boolean>('check_openclaw_status', { peer });
+            if (running) {
+              results.add(peer.id);
+            }
+          } catch {
+            // Silently skip — peer may not be reachable for SSH
+          }
+        }
+      }
+      setOpenclawPeers(results);
+    } finally {
+      checkingOpenclawRef.current = false;
+    }
+  }, [config, peerStatuses]);
 
   useEffect(() => {
     loadConfig();
@@ -107,6 +110,14 @@ export function P2PTab() {
       unlisten.then(fn => fn());
     };
   }, [loadConfig, checkStatuses, loadPairRequests]);
+
+  // OpenClaw check: run once after first status check, then every 120s
+  useEffect(() => {
+    if (!config || peerStatuses.size === 0) return;
+    checkOpenclawStatus();
+    const openclawInterval = setInterval(checkOpenclawStatus, 120000);
+    return () => clearInterval(openclawInterval);
+  }, [config, peerStatuses, checkOpenclawStatus]);
 
   const discoverPeers = async () => {
     setDiscovering(true);
