@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'preact/hooks';
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import type { PeerDevice } from '../App';
 import { toast } from './Toast';
@@ -75,6 +76,14 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
     term.loadAddon(fitAddon);
     term.open(termRef.current);
     fitAddon.fit();
+
+    // Try WebGL renderer — canvas renderer has cursor/selection issues in WebKitGTK
+    try {
+      const webglAddon = new WebglAddon();
+      term.loadAddon(webglAddon);
+    } catch {
+      console.warn('WebGL renderer not available, using default canvas renderer');
+    }
 
     // Force cursor options after open — v6 beta may not apply constructor options
     term.options.cursorStyle = 'block';
