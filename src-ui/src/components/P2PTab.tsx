@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'preact/hooks';
 import { invoke } from '@tauri-apps/api/core';
-import type { PeerDevice, P2PConfig, DeviceStatus, ConnectionType } from '../App';
+import { listen } from '@tauri-apps/api/event';
+import type { PeerDevice, P2PConfig, DeviceStatus, ConnectionType, PairRequest } from '../App';
 import { toast } from './Toast';
 
 interface PeerFormData {
@@ -21,6 +22,8 @@ export function P2PTab() {
   const [discoveredPeers, setDiscoveredPeers] = useState<PeerDevice[]>([]);
   const [discovering, setDiscovering] = useState(false);
   const [peerStatuses, setPeerStatuses] = useState<Map<string, DeviceStatus>>(new Map());
+  const [pairRequests, setPairRequests] = useState<PairRequest[]>([]);
+  const [pairingIp, setPairingIp] = useState<string | null>(null);
   const [form, setForm] = useState<PeerFormData>({
     name: '',
     hostname: '',
@@ -52,12 +55,33 @@ export function P2PTab() {
     }
   }, []);
 
+  const loadPairRequests = useCallback(async () => {
+    try {
+      const requests = await invoke<PairRequest[]>('get_pending_pair_requests');
+      setPairRequests(requests);
+    } catch {
+      // Silent — pair requests polling failure is expected during startup
+    }
+  }, []);
+
   useEffect(() => {
     loadConfig();
     checkStatuses();
-    const interval = setInterval(checkStatuses, 30000);
-    return () => clearInterval(interval);
-  }, [loadConfig, checkStatuses]);
+    loadPairRequests();
+    const statusInterval = setInterval(checkStatuses, 30000);
+    const pairInterval = setInterval(loadPairRequests, 3000);
+
+    // Listen for real-time pair request events
+    const unlisten = listen<PairRequest>('pair-request-received', () => {
+      loadPairRequests();
+    });
+
+    return () => {
+      clearInterval(statusInterval);
+      clearInterval(pairInterval);
+      unlisten.then(fn => fn());
+    };
+  }, [loadConfig, checkStatuses, loadPairRequests]);
 
   const discoverPeers = async () => {
     setDiscovering(true);
@@ -73,6 +97,49 @@ export function P2PTab() {
       toast.error('Failed to discover peers: ' + e);
     } finally {
       setDiscovering(false);
+    }
+  };
+
+  const pairWithPeer = async (peer: PeerDevice) => {
+    setPairingIp(peer.ip_address);
+    try {
+      const accepted = await invoke<boolean>('pair_with_peer', {
+        ip: peer.ip_address,
+        port: config?.listen_port || 4827,
+      });
+      if (accepted) {
+        toast.success(`Paired with ${peer.name}!`);
+        await loadConfig();
+        // Remove from discovered list
+        setDiscoveredPeers(prev => prev.filter(p => p.ip_address !== peer.ip_address));
+      } else {
+        toast.info(`${peer.name} declined the pair request`);
+      }
+    } catch (e) {
+      toast.error('Pair failed: ' + e);
+    } finally {
+      setPairingIp(null);
+    }
+  };
+
+  const acceptPairRequest = async (requestId: string) => {
+    try {
+      await invoke('accept_pair_request', { requestId });
+      toast.success('Pair request accepted!');
+      await loadConfig();
+      await loadPairRequests();
+    } catch (e) {
+      toast.error('Failed to accept: ' + e);
+    }
+  };
+
+  const rejectPairRequest = async (requestId: string) => {
+    try {
+      await invoke('reject_pair_request', { requestId });
+      toast.info('Pair request rejected');
+      await loadPairRequests();
+    } catch (e) {
+      toast.error('Failed to reject: ' + e);
     }
   };
 
@@ -185,21 +252,6 @@ export function P2PTab() {
     }
   };
 
-  const addDiscoveredPeer = (peer: PeerDevice) => {
-    setForm({
-      name: peer.name,
-      hostname: peer.hostname,
-      ip_address: peer.ip_address,
-      port: 22,
-      ssh_user: '',
-      ssh_key_path: '',
-      ssh_password: '',
-      is_trusted: false,
-    });
-    setEditingPeer(null);
-    setShowModal(true);
-  };
-
   const getConnectionIcon = (type: ConnectionType): string => {
     switch (type) {
       case 'Tailscale': return '🦎';
@@ -216,12 +268,47 @@ export function P2PTab() {
     }
   };
 
+  const formatTime = (isoString: string): string => {
+    const date = new Date(isoString);
+    return date.toLocaleTimeString();
+  };
+
   if (!config) {
     return <div class="empty-state">Loading...</div>;
   }
 
   return (
     <div>
+      {/* Incoming Pair Requests */}
+      {pairRequests.length > 0 && (
+        <div class="card" style={{ borderColor: 'var(--primary)', borderWidth: '2px' }}>
+          <div class="card-header">
+            <span class="card-title">Incoming Pair Requests ({pairRequests.length})</span>
+          </div>
+          {pairRequests.map(req => (
+            <div class="peer-item" key={req.id}>
+              <div class="peer-status" style={{ backgroundColor: 'var(--primary)' }} />
+              <div class="peer-info">
+                <div class="peer-name">{req.from.device_name}</div>
+                <div class="peer-details">
+                  {req.from.hostname} • {req.from.ip_address}
+                  {req.from.flymode_version && ` • v${req.from.flymode_version}`}
+                  {' • '}{formatTime(req.received_at)}
+                </div>
+              </div>
+              <div class="peer-actions">
+                <button class="btn btn-primary btn-sm" onClick={() => acceptPairRequest(req.id)}>
+                  Accept
+                </button>
+                <button class="btn btn-danger btn-sm" onClick={() => rejectPairRequest(req.id)}>
+                  Reject
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div class="card">
         <div class="card-header">
           <span class="card-title">This Device</span>
@@ -314,8 +401,12 @@ export function P2PTab() {
                   🦎 {peer.ip_address}
                 </div>
               </div>
-              <button class="btn btn-primary btn-sm" onClick={() => addDiscoveredPeer(peer)}>
-                + Add
+              <button
+                class="btn btn-primary btn-sm"
+                onClick={() => pairWithPeer(peer)}
+                disabled={pairingIp === peer.ip_address}
+              >
+                {pairingIp === peer.ip_address ? 'Pairing...' : 'Pair'}
               </button>
             </div>
           ))}

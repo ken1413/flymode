@@ -1,5 +1,6 @@
 use crate::config::{ActionType, AppConfig, ScheduleRule, TargetType};
 use crate::notes::{Note, NoteColor, NotesStore};
+use crate::p2p::pair::{PairRequest, PairServer};
 use crate::p2p::{DeviceStatus, P2PConfig, P2PManager, PeerDevice};
 use crate::scheduler::{execute_custom_command, execute_command, get_airplane_command, get_bluetooth_command, get_wifi_command};
 use crate::sync::{SyncEngine, SyncResult, SyncState};
@@ -13,6 +14,7 @@ use tokio::sync::RwLock;
 pub type ConfigState = Arc<RwLock<AppConfig>>;
 pub type NotesState = Arc<NotesStore>;
 pub type P2PState = Arc<P2PManager>;
+pub type PairState = Arc<PairServer>;
 pub type SyncStateType = Arc<SyncEngine>;
 pub type TransferState = Arc<TransferManager>;
 
@@ -312,6 +314,27 @@ pub async fn browse_remote_files(
     path: String,
 ) -> Result<Vec<crate::p2p::RemoteFileInfo>, String> {
     state.browse_remote(&peer, &path).await.map_err(|e| e.to_string())
+}
+
+// Pair commands
+#[tauri::command]
+pub async fn pair_with_peer(state: State<'_, PairState>, ip: String, port: u16) -> Result<bool, String> {
+    state.initiate_pair(&ip, port).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_pending_pair_requests(state: State<'_, PairState>) -> Result<Vec<PairRequest>, String> {
+    Ok(state.get_pending_requests().await)
+}
+
+#[tauri::command]
+pub async fn accept_pair_request(state: State<'_, PairState>, request_id: String) -> Result<(), String> {
+    state.accept_request(&request_id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn reject_pair_request(state: State<'_, PairState>, request_id: String) -> Result<(), String> {
+    state.reject_request(&request_id).await.map_err(|e| e.to_string())
 }
 
 // Utility commands

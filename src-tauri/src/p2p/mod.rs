@@ -1,3 +1,5 @@
+pub mod pair;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::io::Read;
@@ -189,7 +191,7 @@ impl P2PConfig {
 }
 
 pub struct P2PManager {
-    config: Arc<RwLock<P2PConfig>>,
+    pub config: Arc<RwLock<P2PConfig>>,
 }
 
 impl P2PManager {
@@ -222,107 +224,9 @@ impl P2PManager {
         if config.peers.iter().any(|p| p.id == peer.id || p.ip_address == peer.ip_address) {
             return Err(P2PError::Config("Peer already exists".to_string()));
         }
-        let should_pair = peer.is_trusted;
-        let local_info = self.build_local_peer_info(&config);
-        config.peers.push(peer.clone());
+        config.peers.push(peer);
         config.save()?;
-        drop(config);
-
-        if should_pair {
-            if let Err(e) = self.register_on_remote(&peer, &local_info).await {
-                tracing::warn!("Auto-pair failed (peer added locally but remote not updated): {}", e);
-            } else {
-                tracing::info!("Auto-paired with {}", peer.name);
-            }
-        }
         Ok(())
-    }
-
-    /// Build a PeerDevice representing this machine, for registering on the remote.
-    fn build_local_peer_info(&self, config: &P2PConfig) -> PeerDevice {
-        // Try to get our Tailscale IP
-        let local_ip = std::process::Command::new("tailscale")
-            .args(["ip", "-4"])
-            .output()
-            .ok()
-            .and_then(|o| String::from_utf8(o.stdout).ok())
-            .map(|s| s.trim().to_string())
-            .unwrap_or_default();
-
-        PeerDevice {
-            id: config.device_id.clone(),
-            name: config.device_name.clone(),
-            hostname: hostname::get()
-                .map(|h| h.to_string_lossy().to_string())
-                .unwrap_or_default(),
-            ip_address: local_ip,
-            port: 22,
-            connection_type: ConnectionType::Tailscale,
-            status: DeviceStatus::Online,
-            last_seen: Some(Utc::now()),
-            ssh_user: String::new(), // Remote will fill in their own user
-            ssh_key_path: None,
-            ssh_password: None,
-            is_trusted: true,
-            tailscale_hostname: None,
-            flymode_version: None,
-        }
-    }
-
-    /// SSH into a remote peer and register this machine in their p2p.json.
-    async fn register_on_remote(&self, peer: &PeerDevice, local_info: &PeerDevice) -> Result<(), P2PError> {
-        let local_json = serde_json::to_string(local_info)
-            .map_err(|e| P2PError::Config(e.to_string()))?;
-
-        // Escape single quotes for shell
-        let escaped = local_json.replace('\'', "'\\''");
-
-        // Script that reads remote p2p.json, adds this peer if not present, writes back
-        let script = format!(
-            r#"python3 -c "
-import json, os, sys
-config_path = os.path.expanduser('~/.config/flymode/p2p.json')
-try:
-    with open(config_path) as f:
-        config = json.load(f)
-except:
-    print('NO_CONFIG')
-    sys.exit(0)
-new_peer = json.loads('{escaped}')
-new_peer['ssh_user'] = os.environ.get('USER', '')
-existing_ips = [p.get('ip_address') for p in config.get('peers', [])]
-if new_peer['ip_address'] in existing_ips:
-    print('ALREADY_EXISTS')
-    sys.exit(0)
-config.setdefault('peers', []).append(new_peer)
-with open(config_path, 'w') as f:
-    json.dump(config, f, indent=2)
-print('OK')
-""#
-        );
-
-        let mut ssh = SSHClient::new();
-        ssh.connect(peer)?;
-        let result = ssh.execute_command(&script)?;
-        ssh.disconnect();
-
-        let result = result.trim();
-        match result {
-            "OK" => {
-                tracing::info!("Successfully registered on remote {}", peer.name);
-                Ok(())
-            }
-            "ALREADY_EXISTS" => {
-                tracing::info!("Already registered on remote {}", peer.name);
-                Ok(())
-            }
-            "NO_CONFIG" => {
-                Err(P2PError::Config("Remote has no FlyMode config yet".to_string()))
-            }
-            other => {
-                Err(P2PError::Config(format!("Unexpected remote response: {}", other)))
-            }
-        }
     }
 
     pub async fn remove_peer(&self, peer_id: &str) -> Result<(), P2PError> {
@@ -334,23 +238,9 @@ print('OK')
 
     pub async fn update_peer(&self, peer: PeerDevice) -> Result<(), P2PError> {
         let mut config = self.config.write().await;
-        let was_trusted = config.peers.iter().find(|p| p.id == peer.id).map(|p| p.is_trusted).unwrap_or(false);
-        let now_trusted = peer.is_trusted;
-        let local_info = self.build_local_peer_info(&config);
-
         if let Some(existing) = config.peers.iter_mut().find(|p| p.id == peer.id) {
-            *existing = peer.clone();
+            *existing = peer;
             config.save()?;
-        }
-        drop(config);
-
-        // Auto-pair when trust is newly granted
-        if now_trusted && !was_trusted {
-            if let Err(e) = self.register_on_remote(&peer, &local_info).await {
-                tracing::warn!("Auto-pair on trust failed: {}", e);
-            } else {
-                tracing::info!("Auto-paired with {} on trust toggle", peer.name);
-            }
         }
         Ok(())
     }

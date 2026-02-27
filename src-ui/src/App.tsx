@@ -91,6 +91,22 @@ export interface P2PConfig {
   sync_interval_seconds: number;
 }
 
+export interface PeerInfo {
+  device_id: string;
+  device_name: string;
+  hostname: string;
+  ip_address: string;
+  listen_port: number;
+  tailscale_hostname: string | null;
+  flymode_version: string | null;
+}
+
+export interface PairRequest {
+  id: string;
+  from: PeerInfo;
+  received_at: string;
+}
+
 export interface SyncState {
   last_sync: string | null;
   status: SyncStatus;

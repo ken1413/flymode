@@ -8,9 +8,10 @@ mod sync;
 mod transfer;
 mod wireless;
 
-use commands::{ConfigState, NotesState, P2PState, SyncStateType, TransferState, *};
+use commands::{ConfigState, NotesState, P2PState, PairState, SyncStateType, TransferState, *};
 use config::AppConfig;
 use notes::NotesStore;
+use p2p::pair::PairServer;
 use p2p::P2PManager;
 use scheduler::Scheduler;
 use sync::SyncEngine;
@@ -52,6 +53,9 @@ fn main() {
     let transfer_manager = TransferManager::new();
     let transfer_state: TransferState = Arc::new(transfer_manager);
 
+    // PairServer shares the same P2PConfig Arc as P2PManager
+    let p2p_config_arc = p2p_state.config.clone();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
@@ -64,15 +68,28 @@ fn main() {
         .manage(transfer_state)
         .manage(Arc::new(RwLock::new(scheduler)))
         .setup(move |app| {
+            // Create and manage PairServer
+            let pair_server = PairServer::new(p2p_config_arc, app.handle().clone());
+            let pair_state: PairState = Arc::new(pair_server);
+            app.manage(pair_state.clone());
+
+            // Spawn TCP pair listener
+            let pair_listener = pair_state.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = pair_listener.start_listener().await {
+                    error!("Pair listener failed: {}", e);
+                }
+            });
+
             let scheduler_state: Arc<RwLock<Scheduler>> = app.state::<Arc<RwLock<Scheduler>>>().inner().clone();
-            
+
             tauri::async_runtime::spawn(async move {
                 let sched = scheduler_state.read().await;
                 sched.start().await;
             });
 
             let sync_state_clone: SyncStateType = app.state::<SyncStateType>().inner().clone();
-            
+
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
                 info!("Auto-sync would start if enabled...");
@@ -126,6 +143,10 @@ fn main() {
             clear_completed_transfers,
             get_transfer_progress,
             browse_remote_files,
+            pair_with_peer,
+            get_pending_pair_requests,
+            accept_pair_request,
+            reject_pair_request,
             get_device_id,
             get_device_name,
         ])
