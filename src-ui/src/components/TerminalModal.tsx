@@ -96,23 +96,42 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
       .then((sid) => {
         sessionIdRef.current = sid;
 
-        // IME composition tracking to prevent double input
-        // compositionstart → skip onData; compositionend → allow onData again
-        // xterm.js internally fires onData with composed text after compositionend
+        // IME handling: block raw keydown during composition at xterm level,
+        // and deduplicate composed text in onData
         let composing = false;
+        let lastComposedData = '';
+        let lastComposedTime = 0;
         const xtermTextarea = termRef.current?.querySelector('textarea');
         if (xtermTextarea) {
           xtermTextarea.addEventListener('compositionstart', () => {
             composing = true;
           });
-          xtermTextarea.addEventListener('compositionend', () => {
-            composing = false;
+          xtermTextarea.addEventListener('compositionend', (e: Event) => {
+            const ce = e as CompositionEvent;
+            lastComposedData = ce.data || '';
+            lastComposedTime = Date.now();
+            // Delay clearing composing flag so stale onData events are skipped
+            setTimeout(() => { composing = false; }, 0);
           });
         }
 
-        // Forward keystrokes to backend (skip during IME composition)
+        // Block raw keydown events during IME composition at xterm level
+        term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+          if (event.isComposing || event.keyCode === 229) {
+            return false;
+          }
+          return true;
+        });
+
+        // Forward keystrokes to backend
         term.onData((data: string) => {
           if (composing) return;
+          // Deduplicate: skip if same as just-composed text within 100ms
+          const now = Date.now();
+          if (lastComposedData && data === lastComposedData && now - lastComposedTime < 100) {
+            lastComposedData = '';
+            return;
+          }
           if (sessionIdRef.current) {
             const encoded = new TextEncoder().encode(data);
             invoke('send_terminal_input', {
