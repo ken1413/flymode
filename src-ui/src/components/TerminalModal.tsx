@@ -49,7 +49,9 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
         background: '#0f172a',
         foreground: '#f1f5f9',
         cursor: '#3b82f6',
+        cursorAccent: '#0f172a',
         selectionBackground: '#334155',
+        selectionInactiveBackground: '#1e293b',
         black: '#0f172a',
         red: '#ef4444',
         green: '#22c55e',
@@ -74,6 +76,10 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
     term.open(termRef.current);
     fitAddon.fit();
 
+    // Force cursor options after open — v6 beta may not apply constructor options
+    term.options.cursorStyle = 'block';
+    term.options.cursorBlink = true;
+
     terminalRef.current = term;
     fitAddonRef.current = fitAddon;
 
@@ -97,7 +103,8 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
     })
       .then((sid) => {
         sessionIdRef.current = sid;
-        term.focus();
+        // Defer focus to next frame — DOM must be fully laid out for cursor to render
+        requestAnimationFrame(() => term.focus());
 
         // Forward all keystrokes (including IME composed text) to backend.
         // xterm.js's CompositionHelper handles IME and fires onData with
