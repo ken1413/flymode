@@ -43,7 +43,6 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
       cursorBlink: true,
       cursorStyle: 'block',
       cursorInactiveStyle: 'outline',
-      allowProposedApi: true,
       fontSize: 14,
       fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
       theme: {
@@ -100,30 +99,6 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
         sessionIdRef.current = sid;
         term.focus();
 
-        // Clipboard: Ctrl+Shift+C to copy, Ctrl+Shift+V to paste
-        term.attachCustomKeyEventHandler((ev: KeyboardEvent) => {
-          if (ev.ctrlKey && ev.shiftKey && ev.type === 'keydown') {
-            if (ev.key === 'C') {
-              const sel = term.getSelection();
-              if (sel) navigator.clipboard.writeText(sel);
-              return false;
-            }
-            if (ev.key === 'V') {
-              navigator.clipboard.readText().then((text) => {
-                if (text && sessionIdRef.current) {
-                  const encoded = new TextEncoder().encode(text);
-                  invoke('send_terminal_input', {
-                    sessionId: sessionIdRef.current,
-                    data: Array.from(encoded),
-                  }).catch(() => {});
-                }
-              });
-              return false;
-            }
-          }
-          return true;
-        });
-
         // Forward all keystrokes (including IME composed text) to backend.
         // xterm.js's CompositionHelper handles IME and fires onData with
         // the final composed text — no need to send from compositionend.
@@ -149,6 +124,12 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
           });
         }
 
+        // Clipboard: copy on selection, Ctrl+Shift+V to paste
+        term.onSelectionChange(() => {
+          const sel = term.getSelection();
+          if (sel) navigator.clipboard.writeText(sel).catch(() => {});
+        });
+
         // Forward resize events
         term.onResize(({ cols, rows }: { cols: number; rows: number }) => {
           if (sessionIdRef.current) {
@@ -165,6 +146,24 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
         toast.error(`Terminal connection failed: ${e}`);
       });
 
+    // Ctrl+Shift+V paste — listen on container to avoid attachCustomKeyEventHandler
+    // which interferes with xterm.js internals (IME, selection)
+    const pasteHandler = (ev: KeyboardEvent) => {
+      if (ev.ctrlKey && ev.shiftKey && ev.key === 'V') {
+        ev.preventDefault();
+        navigator.clipboard.readText().then((text) => {
+          if (text && sessionIdRef.current) {
+            const encoded = new TextEncoder().encode(text);
+            invoke('send_terminal_input', {
+              sessionId: sessionIdRef.current,
+              data: Array.from(encoded),
+            }).catch(() => {});
+          }
+        });
+      }
+    };
+    termRef.current.addEventListener('keydown', pasteHandler);
+
     // ResizeObserver for container size changes
     const observer = new ResizeObserver(() => {
       if (fitAddonRef.current) {
@@ -174,6 +173,7 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
     observer.observe(termRef.current);
 
     return () => {
+      termRef.current?.removeEventListener('keydown', pasteHandler);
       observer.disconnect();
       cleanup();
     };
@@ -202,11 +202,7 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
             x
           </button>
         </div>
-        <div
-          class="terminal-container"
-          ref={termRef}
-          onClick={() => terminalRef.current?.focus()}
-        />
+        <div class="terminal-container" ref={termRef} />
       </div>
     </div>
   );
