@@ -64,8 +64,13 @@ export function P2PTab() {
     try {
       const peers = await invoke<PeerDevice[]>('discover_tailscale');
       setDiscoveredPeers(peers);
+      if (peers.length === 0) {
+        toast.info('No new Tailscale peers found');
+      } else {
+        toast.success(`Found ${peers.length} Tailscale peer(s)`);
+      }
     } catch (e) {
-      toast.error('Failed to discover peers');
+      toast.error('Failed to discover peers: ' + e);
     } finally {
       setDiscovering(false);
     }

@@ -202,7 +202,7 @@ build_app() {
     cd src-ui && npm install --silent && cd ..
 
     info "Building FlyMode (release)... this may take a while"
-    cargo tauri build 2>&1 | tail -5
+    cd src-tauri && cargo build --release 2>&1 | tail -5 && cd ..
 
     ok "Build complete"
 }
