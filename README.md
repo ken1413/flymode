@@ -24,24 +24,64 @@
 - 瀏覽遠端檔案系統
 - 傳輸佇列管理
 
-## 快速開始
+## 一鍵安裝
+
+在任何 Linux (Ubuntu/Fedora/Arch) 或 macOS 電腦上執行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/setup.sh | bash
+```
+
+安裝腳本會自動處理：
+- 系統依賴（GTK、WebKit、OpenSSL 等）
+- Rust 工具鏈
+- Node.js 22 LTS
+- Tauri CLI
+- Clone、編譯、安裝 binary 到 `~/.local/bin/flymode`
+- 建立桌面捷徑（Linux）
+
+安裝完成後直接執行：
+
+```bash
+flymode
+```
+
+## 手動安裝
+
+### 系統需求
+
+- Rust 1.70+
+- Node.js 18+
+- Tailscale（可選，用於自動發現）
+
+### Linux 系統依賴
+
+```bash
+sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev \
+    libappindicator3-dev librsvg2-dev patchelf \
+    libssl-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+```
+
+### 建置步驟
+
+```bash
+git clone https://github.com/ken1413/flymode.git
+cd flymode/src-ui && npm install && cd ..
+cargo tauri build
+```
+
+## 開發
 
 ```bash
 # 安裝前端依賴
 cd src-ui && npm install
 
-# 開發模式
+# 開發模式（hot reload）
 cd .. && cargo tauri dev
 
-# 生產建置
-cargo tauri build
+# 執行測試
+cd src-tauri && cargo test
 ```
-
-## 系統需求
-
-- Rust 1.70+
-- Node.js 18+
-- Tailscale (可選，用於自動發現)
 
 ## 文件
 
