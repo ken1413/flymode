@@ -355,19 +355,18 @@ impl SyncEngine {
     }
 
     pub async fn start_auto_sync(&self) {
-        let interval_secs = self.p2p_manager.get_config().await.sync_interval_seconds;
         let state = self.state.clone();
         let p2p = self.p2p_manager.clone();
         let notes = self.notes_store.clone();
         let sync_folder = self.sync_folder.clone();
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(
-                std::time::Duration::from_secs(interval_secs)
-            );
-
             loop {
-                interval.tick().await;
+                // Re-read interval every cycle so user changes take effect immediately
+                let config = p2p.get_config().await;
+                let interval_secs = config.sync_interval_seconds.max(10);
+
+                tokio::time::sleep(std::time::Duration::from_secs(interval_secs)).await;
 
                 let config = p2p.get_config().await;
                 if !config.sync_enabled {
