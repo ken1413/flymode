@@ -288,18 +288,26 @@ impl P2PManager {
 
     #[cfg(target_os = "linux")]
     async fn discover_tailscale_linux(&self) -> Result<Vec<PeerDevice>, P2PError> {
+        tracing::info!("Running tailscale status --json ...");
         let output = tokio::process::Command::new("tailscale")
             .args(["status", "--json"])
             .output()
             .await
-            .map_err(|e| P2PError::Connection(e.to_string()))?;
+            .map_err(|e| {
+                tracing::error!("Failed to run tailscale: {}", e);
+                P2PError::Connection(e.to_string())
+            })?;
 
         if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            tracing::warn!("tailscale status failed: {}", stderr);
             return Ok(Vec::new());
         }
 
         let json_str = String::from_utf8_lossy(&output.stdout);
-        self.parse_tailscale_status(&json_str)
+        let peers = self.parse_tailscale_status(&json_str).await?;
+        tracing::info!("Discovered {} Tailscale peers", peers.len());
+        Ok(peers)
     }
 
     #[cfg(target_os = "windows")]
@@ -315,7 +323,7 @@ impl P2PManager {
         }
 
         let json_str = String::from_utf8_lossy(&output.stdout);
-        self.parse_tailscale_status(&json_str)
+        self.parse_tailscale_status(&json_str).await
     }
 
     #[cfg(target_os = "macos")]
@@ -331,10 +339,10 @@ impl P2PManager {
         }
 
         let json_str = String::from_utf8_lossy(&output.stdout);
-        self.parse_tailscale_status(&json_str)
+        self.parse_tailscale_status(&json_str).await
     }
 
-    fn parse_tailscale_status(&self, json_str: &str) -> Result<Vec<PeerDevice>, P2PError> {
+    async fn parse_tailscale_status(&self, json_str: &str) -> Result<Vec<PeerDevice>, P2PError> {
         #[derive(Deserialize)]
         #[allow(non_snake_case)]
         struct TailscaleStatus {
@@ -360,8 +368,9 @@ impl P2PManager {
         let status: TailscaleStatus = serde_json::from_str(json_str)
             .map_err(|e| P2PError::Config(e.to_string()))?;
 
-        let config = self.config.blocking_read();
+        let config = self.config.read().await;
         let known_ips: Vec<String> = config.peers.iter().map(|p| p.ip_address.clone()).collect();
+        drop(config);
 
         let peers: Vec<PeerDevice> = status.Peer
             .unwrap_or_default()
