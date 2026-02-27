@@ -346,6 +346,40 @@ pub fn get_build_info() -> std::collections::HashMap<String, String> {
     info
 }
 
+// Authentication
+#[tauri::command]
+pub fn verify_system_password(password: String) -> Result<bool, String> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    let username = std::env::var("USER")
+        .or_else(|_| std::env::var("LOGNAME"))
+        .map_err(|_| "Cannot determine username".to_string())?;
+
+    // Use unix_chkpwd (PAM helper, setuid root, available on all PAM-enabled Linux)
+    let chkpwd = ["/usr/sbin/unix_chkpwd", "/sbin/unix_chkpwd"]
+        .iter()
+        .find(|p| std::path::Path::new(p).exists())
+        .ok_or_else(|| "unix_chkpwd not found".to_string())?;
+
+    let mut child = Command::new(chkpwd)
+        .arg(&username)
+        .arg("nullok")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn unix_chkpwd: {}", e))?;
+
+    if let Some(ref mut stdin) = child.stdin {
+        let _ = stdin.write_all(format!("{}\0", password).as_bytes());
+    }
+    drop(child.stdin.take());
+
+    let status = child.wait().map_err(|e| format!("unix_chkpwd wait failed: {}", e))?;
+    Ok(status.success())
+}
+
 // Utility commands
 #[tauri::command]
 pub fn get_device_id() -> String {

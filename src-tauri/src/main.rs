@@ -212,6 +212,7 @@ fn main() {
             accept_pair_request,
             reject_pair_request,
             get_build_info,
+            verify_system_password,
             get_device_id,
             get_device_name,
         ])

@@ -54,6 +54,17 @@ export function SettingsTab({ config, onSave }: { config: AppConfig; onSave: (c:
             onClick={() => updateSetting('auto_start', !config.auto_start)}
           />
         </div>
+
+        <div class="rule-item">
+          <div class="rule-info">
+            <div class="rule-name">Require Password</div>
+            <div class="rule-details">Ask for system login password when opening the app</div>
+          </div>
+          <div
+            class={`toggle ${config.require_password ? 'on' : ''}`}
+            onClick={() => updateSetting('require_password', !config.require_password)}
+          />
+        </div>
       </div>
 
       <div class="card">

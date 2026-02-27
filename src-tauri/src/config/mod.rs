@@ -47,6 +47,8 @@ pub struct AppConfig {
     pub show_notifications: bool,
     pub minimize_to_tray: bool,
     pub auto_start: bool,
+    #[serde(default)]
+    pub require_password: bool,
 }
 
 impl Default for AppConfig {
@@ -57,6 +59,7 @@ impl Default for AppConfig {
             show_notifications: true,
             minimize_to_tray: true,
             auto_start: false,
+            require_password: false,
         }
     }
 }

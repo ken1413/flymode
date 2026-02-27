@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'preact/hooks';
+import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { RulesTab } from './components/RulesTab';
 import { QuickActionsTab } from './components/QuickActionsTab';
 import { NotesTab } from './components/NotesTab';
@@ -7,6 +8,7 @@ import { P2PTab } from './components/P2PTab';
 import { SyncTab } from './components/SyncTab';
 import { TransferTab } from './components/TransferTab';
 import { SettingsTab } from './components/SettingsTab';
+import { LockScreen } from './components/LockScreen';
 import { ToastContainer, toast } from './components/Toast';
 
 export interface ScheduleRule {
@@ -30,6 +32,7 @@ export interface AppConfig {
   show_notifications: boolean;
   minimize_to_tray: boolean;
   auto_start: boolean;
+  require_password: boolean;
 }
 
 export interface WirelessStatus {
@@ -167,14 +170,18 @@ export function App() {
   const [status, setStatus] = useState<WirelessStatus | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('notes');
   const [loading, setLoading] = useState(true);
+  const [locked, setLocked] = useState(false);
   const [syncState, setSyncState] = useState<SyncState | null>(null);
+  const wasHidden = useRef(false);
 
   const loadConfig = useCallback(async () => {
     try {
       const cfg = await invoke<AppConfig>('get_config');
       setConfig(cfg);
+      return cfg;
     } catch (e) {
       toast.error('Failed to load config');
+      return null;
     }
   }, []);
 
@@ -197,14 +204,41 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    loadConfig().then(() => setLoading(false));
+    loadConfig().then((cfg) => {
+      setLoading(false);
+      if (cfg?.require_password) {
+        setLocked(true);
+      }
+    });
     loadStatus();
     loadSyncState();
     const interval = setInterval(loadStatus, 5000);
     const syncInterval = setInterval(loadSyncState, 3000);
+
+    // Lock when window is restored from tray (was hidden, now visible)
+    const appWindow = getCurrentWindow();
+    const unlisten = appWindow.onFocusChanged(({ payload: focused }) => {
+      if (focused && wasHidden.current) {
+        wasHidden.current = false;
+        // Re-read config to check if require_password is still on
+        invoke<AppConfig>('get_config').then(cfg => {
+          if (cfg?.require_password) {
+            setLocked(true);
+          }
+        });
+      }
+    });
+
+    // Track when window gets hidden (minimize to tray)
+    const unlistenVisibility = appWindow.onCloseRequested(() => {
+      wasHidden.current = true;
+    });
+
     return () => {
       clearInterval(interval);
       clearInterval(syncInterval);
+      unlisten.then(fn => fn());
+      unlistenVisibility.then(fn => fn());
     };
   }, [loadConfig, loadStatus, loadSyncState]);
 
@@ -226,6 +260,15 @@ export function App() {
     { id: 'quick', label: 'Quick', icon: '⚡' },
     { id: 'settings', label: 'Settings', icon: '⚙️' },
   ];
+
+  if (locked) {
+    return (
+      <div class="container">
+        <ToastContainer />
+        <LockScreen onUnlock={() => setLocked(false)} />
+      </div>
+    );
+  }
 
   return (
     <div class="container">
