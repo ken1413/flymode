@@ -43,6 +43,7 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
       cursorBlink: true,
       cursorStyle: 'block',
       cursorInactiveStyle: 'outline',
+      allowProposedApi: true,
       fontSize: 14,
       fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
       theme: {
@@ -98,6 +99,30 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
       .then((sid) => {
         sessionIdRef.current = sid;
         term.focus();
+
+        // Clipboard: Ctrl+Shift+C to copy, Ctrl+Shift+V to paste
+        term.attachCustomKeyEventHandler((ev: KeyboardEvent) => {
+          if (ev.ctrlKey && ev.shiftKey && ev.type === 'keydown') {
+            if (ev.key === 'C') {
+              const sel = term.getSelection();
+              if (sel) navigator.clipboard.writeText(sel);
+              return false;
+            }
+            if (ev.key === 'V') {
+              navigator.clipboard.readText().then((text) => {
+                if (text && sessionIdRef.current) {
+                  const encoded = new TextEncoder().encode(text);
+                  invoke('send_terminal_input', {
+                    sessionId: sessionIdRef.current,
+                    data: Array.from(encoded),
+                  }).catch(() => {});
+                }
+              });
+              return false;
+            }
+          }
+          return true;
+        });
 
         // Forward all keystrokes (including IME composed text) to backend.
         // xterm.js's CompositionHelper handles IME and fires onData with
