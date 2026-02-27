@@ -96,22 +96,32 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
       .then((sid) => {
         sessionIdRef.current = sid;
 
-        // IME handling: block raw keydown during composition at xterm level,
-        // and deduplicate composed text in onData
+        // IME handling strategy:
+        // - compositionend sends composed text directly
+        // - composing stays true for 300ms after compositionend to block
+        //   raw keystrokes that leak between compositions
+        // - onData only handles non-IME input (English, control keys, etc.)
         let composing = false;
-        let lastComposedData = '';
-        let lastComposedTime = 0;
+        let composingTimer: ReturnType<typeof setTimeout> | null = null;
         const xtermTextarea = termRef.current?.querySelector('textarea');
         if (xtermTextarea) {
           xtermTextarea.addEventListener('compositionstart', () => {
             composing = true;
+            if (composingTimer) { clearTimeout(composingTimer); composingTimer = null; }
           });
           xtermTextarea.addEventListener('compositionend', (e: Event) => {
+            // Send composed text directly from here
             const ce = e as CompositionEvent;
-            lastComposedData = ce.data || '';
-            lastComposedTime = Date.now();
-            // Delay clearing composing flag so stale onData events are skipped
-            setTimeout(() => { composing = false; }, 0);
+            if (ce.data && sessionIdRef.current) {
+              const encoded = new TextEncoder().encode(ce.data);
+              invoke('send_terminal_input', {
+                sessionId: sessionIdRef.current,
+                data: Array.from(encoded),
+              }).catch(() => {});
+            }
+            // Keep composing=true for 300ms to block leaked raw keystrokes
+            if (composingTimer) clearTimeout(composingTimer);
+            composingTimer = setTimeout(() => { composing = false; }, 300);
           });
         }
 
@@ -123,15 +133,9 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
           return true;
         });
 
-        // Forward keystrokes to backend
+        // Forward keystrokes to backend (only non-IME input)
         term.onData((data: string) => {
           if (composing) return;
-          // Deduplicate: skip if same as just-composed text within 100ms
-          const now = Date.now();
-          if (lastComposedData && data === lastComposedData && now - lastComposedTime < 100) {
-            lastComposedData = '';
-            return;
-          }
           if (sessionIdRef.current) {
             const encoded = new TextEncoder().encode(data);
             invoke('send_terminal_input', {
