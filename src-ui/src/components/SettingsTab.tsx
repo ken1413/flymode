@@ -1,6 +1,16 @@
+import { useState, useEffect } from 'preact/hooks';
+import { invoke } from '@tauri-apps/api/core';
 import type { AppConfig } from '../App';
 
 export function SettingsTab({ config, onSave }: { config: AppConfig; onSave: (c: AppConfig) => void }) {
+  const [buildInfo, setBuildInfo] = useState<{ version: string; git_hash: string } | null>(null);
+
+  useEffect(() => {
+    invoke<Record<string, string>>('get_build_info').then(info => {
+      setBuildInfo({ version: info.version, git_hash: info.git_hash });
+    });
+  }, []);
+
   const updateSetting = <K extends keyof AppConfig>(key: K, value: AppConfig[K]) => {
     onSave({ ...config, [key]: value });
   };
@@ -77,7 +87,7 @@ export function SettingsTab({ config, onSave }: { config: AppConfig; onSave: (c:
           <span class="card-title">About</span>
         </div>
         <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
-          FlyMode v0.2.0
+          FlyMode v{buildInfo?.version || '...'} ({buildInfo?.git_hash || '...'})
         </p>
         <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '8px' }}>
           A desktop application to automatically control wireless settings (WiFi, Bluetooth, Airplane Mode) 

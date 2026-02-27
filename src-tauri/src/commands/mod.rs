@@ -337,6 +337,15 @@ pub async fn reject_pair_request(state: State<'_, PairState>, request_id: String
     state.reject_request(&request_id).await.map_err(|e| e.to_string())
 }
 
+// Build info
+#[tauri::command]
+pub fn get_build_info() -> std::collections::HashMap<String, String> {
+    let mut info = std::collections::HashMap::new();
+    info.insert("version".to_string(), env!("CARGO_PKG_VERSION").to_string());
+    info.insert("git_hash".to_string(), env!("GIT_HASH").to_string());
+    info
+}
+
 // Utility commands
 #[tauri::command]
 pub fn get_device_id() -> String {
