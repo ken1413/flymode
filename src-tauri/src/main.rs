@@ -18,6 +18,9 @@ use sync::SyncEngine;
 use transfer::TransferManager;
 use std::sync::Arc;
 use tauri::Manager;
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::tray::TrayIconBuilder;
+use tauri::image::Image;
 use tokio::sync::RwLock;
 use tracing::{error, info};
 
@@ -96,7 +99,68 @@ fn main() {
                 sync_state_clone.start_auto_sync().await;
             });
 
-            // Tray icon temporarily disabled
+            // System tray icon
+            let show_item = MenuItemBuilder::with_id("show", "Show FlyMode").build(app)?;
+            let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+            let tray_menu = MenuBuilder::new(app)
+                .item(&show_item)
+                .separator()
+                .item(&quit_item)
+                .build()?;
+
+            let tray_icon = Image::from_path("icons/32x32.png")
+                .unwrap_or_else(|_| Image::from_bytes(include_bytes!("../icons/32x32.png")).expect("Failed to load embedded icon"));
+
+            let _tray = TrayIconBuilder::new()
+                .icon(tray_icon)
+                .tooltip("FlyMode")
+                .menu(&tray_menu)
+                .on_menu_event(|app, event| {
+                    match event.id().as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, .. } = event {
+                        if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
+            // Handle window close → minimize to tray
+            let app_handle = app.handle().clone();
+            let config_state_for_close: ConfigState = app.state::<ConfigState>().inner().clone();
+            if let Some(window) = app.get_webview_window("main") {
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        let minimize_to_tray = {
+                            let config = config_state_for_close.blocking_read();
+                            config.minimize_to_tray
+                        };
+                        if minimize_to_tray {
+                            api.prevent_close();
+                            if let Some(win) = app_handle.get_webview_window("main") {
+                                let _ = win.hide();
+                            }
+                        }
+                    }
+                });
+            }
+
             info!("Application starting...");
 
             Ok(())
