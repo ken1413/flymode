@@ -113,7 +113,14 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
       .then((sid) => {
         sessionIdRef.current = sid;
         // Defer focus to next frame — DOM must be fully laid out for cursor to render
-        requestAnimationFrame(() => term.focus());
+        requestAnimationFrame(() => {
+          term.focus();
+          // Clear textarea AFTER focus settles — xterm.js init may repopulate it
+          setTimeout(() => {
+            const ta = termRef.current?.querySelector('textarea') as HTMLTextAreaElement | null;
+            if (ta) ta.value = '';
+          }, 200);
+        });
 
         // Forward all keystrokes (including IME composed text) to backend.
         // xterm.js's CompositionHelper handles IME and fires onData with
@@ -135,8 +142,6 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
         // the textarea, so old composed text replays on next composition.
         const xtermTextarea = termRef.current?.querySelector('textarea') as HTMLTextAreaElement | null;
         if (xtermTextarea) {
-          // Clear textarea upfront so first composition starts clean
-          xtermTextarea.value = '';
           xtermTextarea.addEventListener('compositionend', () => {
             setTimeout(() => { xtermTextarea.value = ''; }, 50);
           });
