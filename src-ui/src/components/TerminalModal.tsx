@@ -113,14 +113,7 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
       .then((sid) => {
         sessionIdRef.current = sid;
         // Defer focus to next frame — DOM must be fully laid out for cursor to render
-        requestAnimationFrame(() => {
-          term.focus();
-          // Clear textarea AFTER focus settles — xterm.js init may repopulate it
-          setTimeout(() => {
-            const ta = termRef.current?.querySelector('textarea') as HTMLTextAreaElement | null;
-            if (ta) ta.value = '';
-          }, 200);
-        });
+        requestAnimationFrame(() => term.focus());
 
         // Forward all keystrokes (including IME composed text) to backend.
         // xterm.js's CompositionHelper handles IME and fires onData with
@@ -137,9 +130,18 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
           }
         });
 
-        // Clear textarea after each composition to prevent text accumulation.
-        // In WebKitGTK, backspace sends \x7f to remote but doesn't clear
-        // the textarea, so old composed text replays on next composition.
+        // IME textarea cleanup for WebKitGTK:
+        // 1. Clear on compositionstart (capture phase) — runs BEFORE xterm.js's
+        //    CompositionHelper records the start position, so it always sees
+        //    an empty textarea. Fixes first-char duplication.
+        // 2. Clear on compositionend — prevents accumulation across compositions.
+        const termContainer = termRef.current;
+        if (termContainer) {
+          termContainer.addEventListener('compositionstart', () => {
+            const ta = termContainer.querySelector('textarea') as HTMLTextAreaElement | null;
+            if (ta) ta.value = '';
+          }, { capture: true });
+        }
         const xtermTextarea = termRef.current?.querySelector('textarea') as HTMLTextAreaElement | null;
         if (xtermTextarea) {
           xtermTextarea.addEventListener('compositionend', () => {
