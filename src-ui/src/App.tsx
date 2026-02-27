@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { listen } from '@tauri-apps/api/event';
 import { RulesTab } from './components/RulesTab';
 import { QuickActionsTab } from './components/QuickActionsTab';
 import { NotesTab } from './components/NotesTab';
@@ -215,6 +216,11 @@ export function App() {
     const interval = setInterval(loadStatus, 5000);
     const syncInterval = setInterval(loadSyncState, 3000);
 
+    // Track when window gets hidden to tray (Rust emits this event)
+    const unlistenHidden = listen('window-hidden', () => {
+      wasHidden.current = true;
+    });
+
     // Lock when window is restored from tray (was hidden, now visible)
     const appWindow = getCurrentWindow();
     const unlisten = appWindow.onFocusChanged(({ payload: focused }) => {
@@ -229,16 +235,11 @@ export function App() {
       }
     });
 
-    // Track when window gets hidden (minimize to tray)
-    const unlistenVisibility = appWindow.onCloseRequested(() => {
-      wasHidden.current = true;
-    });
-
     return () => {
       clearInterval(interval);
       clearInterval(syncInterval);
+      unlistenHidden.then(fn => fn());
       unlisten.then(fn => fn());
-      unlistenVisibility.then(fn => fn());
     };
   }, [loadConfig, loadStatus, loadSyncState]);
 

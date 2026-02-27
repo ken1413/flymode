@@ -17,7 +17,7 @@ use scheduler::Scheduler;
 use sync::SyncEngine;
 use transfer::TransferManager;
 use std::sync::Arc;
-use tauri::Manager;
+use tauri::{Manager, Emitter};
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
 use tauri::image::Image;
@@ -155,6 +155,7 @@ fn main() {
                             api.prevent_close();
                             if let Some(win) = app_handle.get_webview_window("main") {
                                 let _ = win.hide();
+                                let _ = win.emit("window-hidden", ());
                             }
                         }
                     }
