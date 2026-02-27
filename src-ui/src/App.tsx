@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback } from 'preact/hooks';
+import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
 import { RulesTab } from './components/RulesTab';
 import { QuickActionsTab } from './components/QuickActionsTab';
 import { NotesTab } from './components/NotesTab';
@@ -172,6 +171,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [locked, setLocked] = useState(false);
   const [syncState, setSyncState] = useState<SyncState | null>(null);
+  const hiddenAt = useRef<number>(0);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -214,19 +214,29 @@ export function App() {
     const interval = setInterval(loadStatus, 5000);
     const syncInterval = setInterval(loadSyncState, 3000);
 
-    // Lock when window is restored from tray (Rust emits this before showing)
-    const unlistenRestore = listen('tray-restore', () => {
-      invoke<AppConfig>('get_config').then(cfg => {
-        if (cfg?.require_password) {
-          setLocked(true);
+    // Lock when window is restored from tray (hidden → visible)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt.current = Date.now();
+      } else if (document.visibilityState === 'visible' && hiddenAt.current > 0) {
+        const elapsed = Date.now() - hiddenAt.current;
+        hiddenAt.current = 0;
+        // Only lock if hidden for >1s (filters out brief minimize/restore)
+        if (elapsed > 1000) {
+          invoke<AppConfig>('get_config').then(cfg => {
+            if (cfg?.require_password) {
+              setLocked(true);
+            }
+          });
         }
-      });
-    });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       clearInterval(interval);
       clearInterval(syncInterval);
-      unlistenRestore.then(fn => fn());
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [loadConfig, loadStatus, loadSyncState]);
 

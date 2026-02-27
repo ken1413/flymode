@@ -17,7 +17,7 @@ use scheduler::Scheduler;
 use sync::SyncEngine;
 use transfer::TransferManager;
 use std::sync::Arc;
-use tauri::{Manager, Emitter};
+use tauri::Manager;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
 use tauri::image::Image;
@@ -119,10 +119,6 @@ fn main() {
                     match event.id().as_ref() {
                         "show" => {
                             if let Some(window) = app.get_webview_window("main") {
-                                // Emit restore event only if window was hidden (tray)
-                                if !window.is_visible().unwrap_or(true) {
-                                    let _ = window.emit("tray-restore", ());
-                                }
                                 let _ = window.show();
                                 let _ = window.unminimize();
                                 let _ = window.set_focus();
@@ -137,9 +133,6 @@ fn main() {
                 .on_tray_icon_event(|tray, event| {
                     if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, .. } = event {
                         if let Some(window) = tray.app_handle().get_webview_window("main") {
-                            if !window.is_visible().unwrap_or(true) {
-                                let _ = window.emit("tray-restore", ());
-                            }
                             let _ = window.show();
                             let _ = window.unminimize();
                             let _ = window.set_focus();
