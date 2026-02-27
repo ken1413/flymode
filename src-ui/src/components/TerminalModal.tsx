@@ -96,8 +96,30 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
       .then((sid) => {
         sessionIdRef.current = sid;
 
-        // Forward keystrokes to backend
+        // IME composition tracking to prevent double input
+        let composing = false;
+        const xtermTextarea = termRef.current?.querySelector('textarea');
+        if (xtermTextarea) {
+          xtermTextarea.addEventListener('compositionstart', () => {
+            composing = true;
+          });
+          xtermTextarea.addEventListener('compositionend', (e: Event) => {
+            composing = false;
+            // Send the final composed text
+            const ce = e as CompositionEvent;
+            if (ce.data && sessionIdRef.current) {
+              const encoded = new TextEncoder().encode(ce.data);
+              invoke('send_terminal_input', {
+                sessionId: sessionIdRef.current,
+                data: Array.from(encoded),
+              }).catch(() => {});
+            }
+          });
+        }
+
+        // Forward keystrokes to backend (skip during IME composition)
         term.onData((data: string) => {
+          if (composing) return;
           if (sessionIdRef.current) {
             const encoded = new TextEncoder().encode(data);
             invoke('send_terminal_input', {
