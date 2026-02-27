@@ -96,11 +96,8 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
       .then((sid) => {
         sessionIdRef.current = sid;
 
-        // IME handling strategy:
-        // - compositionend sends composed text directly
-        // - composing stays true for 300ms after compositionend to block
-        //   raw keystrokes that leak between compositions
-        // - onData only handles non-IME input (English, control keys, etc.)
+        // IME handling: let xterm.js handle composition internally,
+        // send composed text from compositionend, block onData during composing
         let composing = false;
         let composingTimer: ReturnType<typeof setTimeout> | null = null;
         const xtermTextarea = termRef.current?.querySelector('textarea');
@@ -110,7 +107,6 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
             if (composingTimer) { clearTimeout(composingTimer); composingTimer = null; }
           });
           xtermTextarea.addEventListener('compositionend', (e: Event) => {
-            // Send composed text directly from here
             const ce = e as CompositionEvent;
             if (ce.data && sessionIdRef.current) {
               const encoded = new TextEncoder().encode(ce.data);
@@ -120,20 +116,13 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
               }).catch(() => {});
             }
             // Keep composing=true for 300ms to block leaked raw keystrokes
+            // and xterm's internal onData that re-fires the same text
             if (composingTimer) clearTimeout(composingTimer);
             composingTimer = setTimeout(() => { composing = false; }, 300);
           });
         }
 
-        // Block raw keydown events during IME composition at xterm level
-        term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
-          if (event.isComposing || event.keyCode === 229) {
-            return false;
-          }
-          return true;
-        });
-
-        // Forward keystrokes to backend (only non-IME input)
+        // Forward keystrokes to backend (blocked during IME composing)
         term.onData((data: string) => {
           if (composing) return;
           if (sessionIdRef.current) {
