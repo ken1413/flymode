@@ -168,7 +168,7 @@ fn run_pty_loop(
         .map_err(|e: ssh2::Error| TerminalError::Ssh(e.to_string()))?;
 
     channel
-        .exec("openclaw-tui")
+        .exec("openclaw tui")
         .map_err(|e: ssh2::Error| TerminalError::Ssh(e.to_string()))?;
 
     // Switch to non-blocking AFTER setup is complete
