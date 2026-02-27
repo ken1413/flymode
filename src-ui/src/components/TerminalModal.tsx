@@ -116,9 +116,16 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
         requestAnimationFrame(() => term.focus());
 
         // Forward all keystrokes (including IME composed text) to backend.
-        // xterm.js's CompositionHelper handles IME and fires onData with
-        // the final composed text — no need to send from compositionend.
+        // Deduplicate: WebKitGTK IME can fire onData twice for the same
+        // composed text (especially the first character). Skip if identical
+        // data arrives within 50ms — too fast for any human input.
+        let lastSentData = '';
+        let lastSentTime = 0;
         term.onData((data: string) => {
+          const now = Date.now();
+          if (data === lastSentData && now - lastSentTime < 50) return;
+          lastSentData = data;
+          lastSentTime = now;
           if (sessionIdRef.current) {
             const encoded = new TextEncoder().encode(data);
             invoke('send_terminal_input', {
@@ -130,18 +137,9 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
           }
         });
 
-        // IME textarea cleanup for WebKitGTK:
-        // 1. Clear on compositionstart (capture phase) — runs BEFORE xterm.js's
-        //    CompositionHelper records the start position, so it always sees
-        //    an empty textarea. Fixes first-char duplication.
-        // 2. Clear on compositionend — prevents accumulation across compositions.
-        const termContainer = termRef.current;
-        if (termContainer) {
-          termContainer.addEventListener('compositionstart', () => {
-            const ta = termContainer.querySelector('textarea') as HTMLTextAreaElement | null;
-            if (ta) ta.value = '';
-          }, { capture: true });
-        }
+        // Clear textarea after each composition to prevent text accumulation.
+        // In WebKitGTK, backspace sends \x7f to remote but doesn't clear
+        // the textarea, so old composed text replays on next composition.
         const xtermTextarea = termRef.current?.querySelector('textarea') as HTMLTextAreaElement | null;
         if (xtermTextarea) {
           xtermTextarea.addEventListener('compositionend', () => {
