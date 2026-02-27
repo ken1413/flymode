@@ -151,14 +151,36 @@ fn run_pty_loop(
     let mut ssh = SSHClient::new();
     ssh.connect(&peer).map_err(|e| TerminalError::Ssh(e.to_string()))?;
 
-    let _ = output_channel.send(b"SSH connected. Starting openclaw-tui...\r\n".to_vec());
+    let _ = output_channel.send(b"SSH connected. Locating openclaw...\r\n".to_vec());
 
     let session = ssh
         .session
         .as_mut()
         .ok_or_else(|| TerminalError::Ssh("No SSH session".to_string()))?;
 
-    // Setup phase must be blocking
+    // Find openclaw binary path on remote machine
+    let openclaw_path = {
+        let mut find_ch = session
+            .channel_session()
+            .map_err(|e: ssh2::Error| TerminalError::Ssh(e.to_string()))?;
+        find_ch
+            .exec("which openclaw 2>/dev/null || command -v openclaw 2>/dev/null || find /usr/local/bin /usr/bin /home -maxdepth 4 -name openclaw -type f 2>/dev/null | head -1")
+            .map_err(|e: ssh2::Error| TerminalError::Ssh(e.to_string()))?;
+        let mut output = String::new();
+        find_ch.read_to_string(&mut output)
+            .map_err(|e| TerminalError::Io(e))?;
+        find_ch.wait_close()
+            .map_err(|e: ssh2::Error| TerminalError::Ssh(e.to_string()))?;
+        let path = output.trim().lines().next().unwrap_or("").to_string();
+        if path.is_empty() {
+            return Err(TerminalError::NotFound("openclaw not found on remote machine".to_string()));
+        }
+        path
+    };
+
+    let _ = output_channel.send(format!("Found: {}. Starting TUI...\r\n", openclaw_path).into_bytes());
+
+    // Setup PTY with full path
     let mut channel = session
         .channel_session()
         .map_err(|e: ssh2::Error| TerminalError::Ssh(e.to_string()))?;
@@ -167,8 +189,9 @@ fn run_pty_loop(
         .request_pty("xterm-256color", None, Some((cols, rows, 0, 0)))
         .map_err(|e: ssh2::Error| TerminalError::Ssh(e.to_string()))?;
 
+    let exec_cmd = format!("{} tui", openclaw_path);
     channel
-        .exec("openclaw tui")
+        .exec(&exec_cmd)
         .map_err(|e: ssh2::Error| TerminalError::Ssh(e.to_string()))?;
 
     // Switch to non-blocking AFTER setup is complete
