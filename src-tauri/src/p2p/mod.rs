@@ -424,7 +424,9 @@ impl SSHClient {
 
     pub fn connect(&mut self, peer: &PeerDevice) -> Result<(), P2PError> {
         let addr = format!("{}:{}", peer.ip_address, peer.port);
-        let tcp = TcpStream::connect(&addr)
+        let sock_addr = addr.parse::<std::net::SocketAddr>()
+            .map_err(|e| P2PError::Connection(format!("Invalid address {}: {}", addr, e)))?;
+        let tcp = TcpStream::connect_timeout(&sock_addr, Duration::from_secs(10))
             .map_err(|e| P2PError::Connection(e.to_string()))?;
 
         let mut session = Session::new()

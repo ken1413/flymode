@@ -63,9 +63,12 @@ impl TerminalManager {
         let shutdown_clone = shutdown.clone();
 
         let handle = tokio::task::spawn_blocking(move || {
-            if let Err(e) = run_pty_loop(peer, cols, rows, input_rx, output_channel, shutdown_clone)
+            if let Err(e) = run_pty_loop(peer, cols, rows, input_rx, &output_channel, shutdown_clone)
             {
                 error!("Terminal session {} ended with error: {}", sid, e);
+                // Send error message to frontend terminal
+                let msg = format!("\r\nConnection error: {}\r\n", e);
+                let _ = output_channel.send(msg.into_bytes());
             } else {
                 info!("Terminal session {} ended normally", sid);
             }
@@ -138,12 +141,17 @@ fn run_pty_loop(
     cols: u32,
     rows: u32,
     input_rx: Receiver<TerminalInput>,
-    output_channel: Channel<Vec<u8>>,
+    output_channel: &Channel<Vec<u8>>,
     shutdown: Arc<AtomicBool>,
 ) -> Result<(), TerminalError> {
-    // Connect via SSH
+    // Connect via SSH (with 10s timeout)
+    let addr = format!("{}:{}", peer.ip_address, peer.port);
+    let _ = output_channel.send(format!("Connecting to {}...\r\n", addr).into_bytes());
+
     let mut ssh = SSHClient::new();
     ssh.connect(&peer).map_err(|e| TerminalError::Ssh(e.to_string()))?;
+
+    let _ = output_channel.send(b"SSH connected. Starting openclaw-tui...\r\n".to_vec());
 
     let session = ssh
         .session
