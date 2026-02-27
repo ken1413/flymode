@@ -189,7 +189,7 @@ fn run_pty_loop(
         .request_pty("xterm-256color", None, Some((cols, rows, 0, 0)))
         .map_err(|e: ssh2::Error| TerminalError::Ssh(e.to_string()))?;
 
-    let exec_cmd = format!("{} tui", openclaw_path);
+    let exec_cmd = format!("LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 {} tui", openclaw_path);
     channel
         .exec(&exec_cmd)
         .map_err(|e: ssh2::Error| TerminalError::Ssh(e.to_string()))?;
