@@ -247,7 +247,7 @@ pub fn check_openclaw_running(peer: &PeerDevice) -> Result<bool, TerminalError> 
     ssh.connect(peer)
         .map_err(|e| TerminalError::Ssh(e.to_string()))?;
     let output = ssh
-        .execute_command("pgrep -x openclaw-gateway")
+        .execute_command("pgrep -f openclaw-gateway")
         .map_err(|e| TerminalError::Ssh(e.to_string()))?;
     ssh.disconnect();
     Ok(!output.trim().is_empty())
