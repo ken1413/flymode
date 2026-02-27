@@ -199,7 +199,10 @@ build_app() {
     cd "$INSTALL_DIR"
 
     info "Installing frontend dependencies..."
-    cd src-ui && npm install --silent && cd ..
+    cd src-ui && npm install --silent
+
+    info "Building frontend..."
+    npm run build && cd ..
 
     info "Building FlyMode (release)... this may take a while"
     cd src-tauri && cargo build --release 2>&1 | tail -5 && cd ..
