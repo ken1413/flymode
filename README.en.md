@@ -2,17 +2,26 @@
 
 [繁體中文](./README.md) | **English**
 
-A cross-platform desktop app combining wireless scheduling, P2P device sync, sticky notes, file transfer, and remote terminal — all **fully decentralized** with no central server. Devices communicate directly via SSH.
+A cross-platform desktop app with built-in **[OpenClaw](https://github.com/openclaw) remote management**, P2P device sync, sticky notes, file transfer, and wireless scheduling — all **fully decentralized** with no central server. Devices communicate directly via SSH.
+
+## OpenClaw Integration
+
+FlyMode provides deep integration with OpenClaw — automatically detects OpenClaw Gateway running on remote devices and lets you manage them through an embedded terminal with one click:
+
+- **Auto-Detection**: Scans all trusted devices every 120 seconds; shows a ">_" button when OpenClaw Gateway is found
+- **One-Click Connect**: Click the button to SSH into the remote machine, auto-locate the `openclaw` binary, and launch its TUI
+- **Full Terminal Experience**: xterm-256color, dynamic window resizing, CJK IME input support, clipboard integration
+- **Multi-Device Management**: Manage multiple OpenClaw instances across different machines from a single FlyMode window
 
 ## Features
 
 | Feature | Description |
 |---------|-------------|
+| **OpenClaw Remote Management** | Auto-detect OpenClaw Gateway, one-click TUI launch, multi-device management, CJK IME support |
 | **Sticky Notes** | 8 colors, 7 categories, tags, pinning, full-text search, auto-sync across trusted devices |
 | **P2P Device Management** | TCP pairing protocol, Tailscale auto-discovery, SSH key/password auth, trust model |
 | **Data Sync** | Last-Write-Wins conflict resolution, auto/manual sync, JSON export/import |
 | **File Transfer** | SFTP upload/download, remote file browser, queue management, progress bars, up to 3 concurrent |
-| **Remote Terminal** | SSH PTY to remote OpenClaw TUI, CJK IME support, clipboard integration |
 | **Wireless Scheduling** | Scheduled WiFi / Bluetooth / Airplane Mode toggle, custom CLI commands |
 | **Quick Actions** | Instant WiFi / Bluetooth / Airplane Mode toggle, run custom commands |
 | **Security** | System password lock, system tray background mode, auto-start on boot |

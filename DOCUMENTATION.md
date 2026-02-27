@@ -16,7 +16,7 @@
    - [裝置管理](#42-裝置管理-🔗)
    - [資料同步](#43-資料同步-🔄)
    - [檔案傳輸](#44-檔案傳輸-📤)
-   - [遠端終端機](#45-遠端終端機)
+   - [OpenClaw 遠端管理](#45-openclaw-遠端管理)
    - [無線排程](#46-無線排程-⏰)
    - [快速操作](#47-快速操作-⚡)
    - [設定](#48-設定-⚙️)
@@ -508,43 +508,73 @@ FlyMode 使用 **Last-Write-Wins (LWW)** 衝突解決策略：
 
 ---
 
-### 4.5 遠端終端機
+### 4.5 OpenClaw 遠端管理
 
-#### 功能
+FlyMode 深度整合 [OpenClaw](https://github.com/openclaw)，提供從偵測、連線到操作的一站式遠端管理體驗。你可以在 FlyMode 的裝置頁面直接管理多台安裝 OpenClaw 的遠端機器，無需手動 SSH 登入。
 
-在 FlyMode 內直接開啟遠端裝置上的 OpenClaw TUI 介面。
+#### 自動偵測 OpenClaw Gateway
 
-#### 使用條件
+FlyMode 會自動偵測遠端裝置上的 OpenClaw：
 
-- 遠端裝置已信任且在線
-- 遠端裝置正在執行 OpenClaw 程式
-- 裝置卡片上會自動顯示「>_」按鈕
+| 項目 | 說明 |
+|------|------|
+| 偵測方式 | 透過 SSH 執行 `pgrep -f openclaw-gateway` |
+| 偵測間隔 | 每 120 秒自動掃描一次 |
+| 偵測對象 | 所有**已信任**且**在線**的裝置 |
+| UI 指示 | 偵測到時，裝置卡片上顯示「>_」終端機按鈕 |
 
-#### 操作
+不需要任何額外設定 — 只要遠端裝置的 OpenClaw Gateway 正在執行，FlyMode 就會自動發現。
 
-1. 在 🔗 裝置頁面找到有「>_」按鈕的裝置
-2. 點「>_」按鈕 → 開啟終端機視窗
-3. 自動連線到遠端 SSH，啟動 OpenClaw TUI
-4. 像一般終端機一樣操作
-5. 點「x」或點擊視窗外部關閉
+#### 一鍵開啟 OpenClaw TUI
+
+點擊裝置卡片上的「>_」按鈕，FlyMode 會自動完成以下步驟：
+
+1. **建立 SSH PTY 連線**到遠端裝置
+2. **自動定位 `openclaw` 路徑** — 先透過 `which openclaw` 查找，若找不到則搜尋 `/home`、`/usr/local/bin`、`/usr/bin`、`/opt` 等目錄（包含 symlink）
+3. **啟動 OpenClaw TUI** — 執行 `openclaw tui`，自動設定 UTF-8 環境
+4. **開啟內嵌式終端機** — 在 FlyMode 視窗內顯示完整的 TUI 介面
+
+整個過程只需一次點擊，無需記住遠端主機名、IP、路徑或任何命令。
+
+#### 多裝置管理
+
+如果你有多台機器都安裝了 OpenClaw，FlyMode 會在每台裝置的卡片上分別顯示「>_」按鈕。你可以：
+
+- 依序連線不同裝置的 OpenClaw TUI
+- 在同一台 FlyMode 內管理所有遠端 OpenClaw 實例
+- 搭配 Tailscale 跨網路管理（如家裡的 NAS、辦公室的伺服器、雲端 VPS）
 
 #### 終端機功能
 
 | 功能 | 說明 |
 |------|------|
-| 中文輸入 | 支援 fcitx5/iBus 等中文輸入法 |
-| 剪貼簿複製 | 選取文字即自動複製 |
+| 中文/日文輸入 | 完整支援 fcitx5、iBus 等 CJK 輸入法，無重複字元問題 |
+| 剪貼簿複製 | 選取文字即自動複製到系統剪貼簿 |
 | 剪貼簿貼上 | `Ctrl+Shift+V` 貼上 |
-| 自動縮放 | 視窗大小改變時自動調整終端機尺寸 |
-| 游標 | 閃爍方塊游標 |
-| 256 色 | 支援 xterm-256color |
+| 動態縮放 | 視窗大小改變時自動調整終端機列數和行數 |
+| 游標 | 閃爍方塊游標，在任何背景下都清晰可見 |
+| 256 色 | 支援 xterm-256color 完整色彩 |
+| WebGL 渲染 | 使用 GPU 加速渲染，流暢的 TUI 操作體驗 |
+
+#### 使用情境
+
+| 情境 | 說明 |
+|------|------|
+| 遠端伺服器管理 | 透過 Tailscale 連線到辦公室或雲端的 OpenClaw 伺服器 |
+| 多節點監控 | 在一台電腦上依序檢查多台 OpenClaw 節點的狀態 |
+| 行動辦公 | 在筆電上隨時連回家中或辦公室的 OpenClaw |
+| 跨平台操作 | Linux / macOS / Windows（計畫中）都能連線到任意平台的 OpenClaw |
 
 #### 技術細節
 
-- 使用 xterm.js v6.1 (beta) + WebGL 渲染器
-- SSH PTY 連線，支援動態視窗大小調整
-- UTF-8 編碼（自動設定 `LANG=en_US.UTF-8`）
-- 中文 IME 使用 50ms 去重機制避免重複字元
+| 項目 | 說明 |
+|------|------|
+| 終端機引擎 | xterm.js v6.1 (beta) + WebGL 渲染器 |
+| 連線協議 | SSH PTY（xterm-256color, 動態 cols/rows）|
+| 路徑搜尋 | `bash -lc 'which openclaw'` → 多目錄 `find` 含 symlink |
+| 編碼 | UTF-8（自動設定 `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8`）|
+| IME 處理 | 50ms 去重機制 + compositionend 清除，防止重複字元和文字累積 |
+| 工作階段管理 | 每個連線獨立 Session ID，關閉時自動清理 SSH 連線 |
 
 ---
 
@@ -842,12 +872,13 @@ CREATE INDEX idx_notes_deleted ON notes(deleted);
 | 同步失敗 | 查看同步紀錄的錯誤訊息，通常是 SSH 連線問題 |
 | 衝突覆蓋了我的修改 | LWW 策略以時間戳為準。避免同時在兩台修改同一筆記 |
 
-### 終端機問題
+### OpenClaw / 終端機問題
 
 | 問題 | 解決方式 |
 |------|---------|
-| 看不到「>_」按鈕 | 確認遠端裝置正在執行 OpenClaw 程式 |
-| 終端機連線失敗 | 確認 SSH 連線正常（先測試同步是否正常）|
+| 看不到「>_」按鈕 | 1. 確認遠端裝置正在執行 OpenClaw Gateway（`pgrep -f openclaw-gateway`）<br>2. 確認該裝置已標記為 Trust<br>3. 確認裝置狀態為 Online<br>4. 等待 120 秒讓偵測掃描完成 |
+| 終端機連線失敗 | 1. 確認 SSH 連線正常（先測試同步是否正常）<br>2. 確認遠端有安裝 `openclaw` 且路徑可被找到 |
+| 顯示「openclaw not found」| 確認遠端 `openclaw` binary 在 PATH 中，或位於 `/usr/local/bin`、`/usr/bin`、`/opt` 等目錄 |
 | 中文輸入重複 | 升級到最新版 FlyMode（已修復）|
 | 游標看不到 | 升級到最新版 FlyMode（已修復，使用 WebGL 渲染器）|
 

@@ -16,7 +16,7 @@ Version: v0.2.0 | Last updated: 2026-02-28
    - [Device Management](#42-device-management)
    - [Data Sync](#43-data-sync)
    - [File Transfer](#44-file-transfer)
-   - [Remote Terminal](#45-remote-terminal)
+   - [OpenClaw Remote Management](#45-openclaw-remote-management)
    - [Wireless Scheduling](#46-wireless-scheduling)
    - [Quick Actions](#47-quick-actions)
    - [Settings](#48-settings)
@@ -508,43 +508,73 @@ Useful for backup/restore, or manually exchanging notes when SSH isn't convenien
 
 ---
 
-### 4.5 Remote Terminal
+### 4.5 OpenClaw Remote Management
 
-#### Overview
+FlyMode provides deep integration with [OpenClaw](https://github.com/openclaw), offering a seamless detect-connect-operate experience for remote management. You can manage multiple OpenClaw instances across different machines directly from FlyMode's Devices tab — no manual SSH required.
 
-Open a remote device's OpenClaw TUI directly within FlyMode.
+#### Automatic OpenClaw Gateway Detection
 
-#### Requirements
+FlyMode automatically detects OpenClaw on remote devices:
 
-- Remote device is trusted and online
-- Remote device is running OpenClaw
-- A ">_" button will automatically appear on the device card
+| Item | Details |
+|------|---------|
+| Detection method | Runs `pgrep -f openclaw-gateway` via SSH |
+| Detection interval | Automatic scan every 120 seconds |
+| Detection targets | All **trusted** and **online** devices |
+| UI indicator | ">_" terminal button appears on the device card |
 
-#### Usage
+No extra configuration needed — as long as OpenClaw Gateway is running on the remote device, FlyMode will discover it automatically.
 
-1. On the Devices tab, find a device with the ">_" button
-2. Click ">_" > terminal window opens
-3. Auto-connects via SSH and launches OpenClaw TUI
-4. Operate like a normal terminal
-5. Click "x" or click outside the window to close
+#### One-Click OpenClaw TUI Launch
+
+Click the ">_" button on any device card, and FlyMode will automatically:
+
+1. **Establish an SSH PTY connection** to the remote device
+2. **Auto-locate the `openclaw` binary** — first via `which openclaw`, then searches `/home`, `/usr/local/bin`, `/usr/bin`, `/opt` (including symlinks)
+3. **Launch OpenClaw TUI** — executes `openclaw tui` with UTF-8 environment
+4. **Open an embedded terminal** — displays the full TUI interface within the FlyMode window
+
+The entire process requires a single click — no need to remember hostnames, IPs, paths, or commands.
+
+#### Multi-Device Management
+
+If you have multiple machines running OpenClaw, FlyMode shows a ">_" button on each device card. You can:
+
+- Connect to different OpenClaw instances one by one
+- Manage all remote OpenClaw nodes from a single FlyMode window
+- Use Tailscale for cross-network management (e.g., home NAS, office server, cloud VPS)
 
 #### Terminal Features
 
 | Feature | Description |
 |---------|-------------|
-| CJK Input | Supports fcitx5/iBus and other CJK input methods |
-| Copy | Select text to auto-copy to clipboard |
-| Paste | `Ctrl+Shift+V` to paste |
-| Auto-resize | Terminal resizes when window size changes |
-| Cursor | Blinking block cursor |
-| 256 colors | xterm-256color support |
+| CJK Input | Full support for fcitx5, iBus, and other CJK input methods — no duplicate character issues |
+| Clipboard Copy | Select text to auto-copy to system clipboard |
+| Clipboard Paste | `Ctrl+Shift+V` to paste |
+| Dynamic Resize | Terminal columns and rows auto-adjust when the window is resized |
+| Cursor | Blinking block cursor, clearly visible on any background |
+| 256 Colors | Full xterm-256color support |
+| WebGL Rendering | GPU-accelerated rendering for smooth TUI operation |
+
+#### Use Cases
+
+| Scenario | Description |
+|----------|-------------|
+| Remote server management | Connect to OpenClaw servers at the office or in the cloud via Tailscale |
+| Multi-node monitoring | Check the status of multiple OpenClaw nodes from one machine |
+| Mobile workflow | Connect back to home or office OpenClaw from your laptop, anywhere |
+| Cross-platform | Linux / macOS / Windows (planned) can all connect to OpenClaw on any platform |
 
 #### Technical Details
 
-- Uses xterm.js v6.1 (beta) + WebGL renderer
-- SSH PTY connection with dynamic window resizing
-- UTF-8 encoding (automatically sets `LANG=en_US.UTF-8`)
-- CJK IME uses 50ms dedup to prevent duplicate characters
+| Item | Details |
+|------|---------|
+| Terminal engine | xterm.js v6.1 (beta) + WebGL renderer |
+| Connection protocol | SSH PTY (xterm-256color, dynamic cols/rows) |
+| Path discovery | `bash -lc 'which openclaw'` → multi-directory `find` including symlinks |
+| Encoding | UTF-8 (auto-sets `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8`) |
+| IME handling | 50ms dedup + compositionend clear, prevents duplicate characters and text accumulation |
+| Session management | Each connection has a unique Session ID, SSH cleaned up on close |
 
 ---
 
@@ -843,12 +873,13 @@ All inter-device communication (sync, file transfer, terminal) goes through encr
 | Sync fails | Check sync history for error messages — usually SSH connection issues |
 | My changes were overwritten | LWW uses timestamps. Avoid editing the same note on two machines simultaneously |
 
-### Terminal Issues
+### OpenClaw / Terminal Issues
 
 | Problem | Solution |
 |---------|----------|
-| No ">_" button | Ensure OpenClaw is running on the remote device |
-| Terminal connection fails | Verify SSH is working (test sync first) |
+| No ">_" button | 1. Ensure OpenClaw Gateway is running on the remote device (`pgrep -f openclaw-gateway`)<br>2. Ensure the device is marked as Trusted<br>3. Ensure the device status is Online<br>4. Wait 120 seconds for the detection scan to complete |
+| Terminal connection fails | 1. Verify SSH is working (test sync first)<br>2. Ensure `openclaw` is installed and its path is discoverable |
+| "openclaw not found" error | Ensure the `openclaw` binary is in PATH, or in `/usr/local/bin`, `/usr/bin`, `/opt`, etc. |
 | CJK input duplicates | Update to the latest FlyMode version (fixed) |
 | Cursor not visible | Update to the latest FlyMode version (fixed with WebGL renderer) |
 
