@@ -1028,6 +1028,13 @@ input[type="checkbox"] {
   height: 100%;
 }
 
+/* Ensure IME frameworks (fcitx5, iBus) can detect xterm's hidden textarea.
+   Some IMEs check textarea dimensions; zero-size makes them ignore it. */
+.terminal-container .xterm-helper-textarea {
+  min-width: 1px !important;
+  min-height: 1px !important;
+}
+
 .btn-terminal {
   padding: 4px 8px;
   font-size: 12px;
