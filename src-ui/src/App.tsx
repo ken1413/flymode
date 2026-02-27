@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
+import { useState, useEffect, useCallback } from 'preact/hooks';
 import { invoke } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 import { RulesTab } from './components/RulesTab';
 import { QuickActionsTab } from './components/QuickActionsTab';
@@ -173,7 +172,6 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [locked, setLocked] = useState(false);
   const [syncState, setSyncState] = useState<SyncState | null>(null);
-  const wasHidden = useRef(false);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -216,30 +214,19 @@ export function App() {
     const interval = setInterval(loadStatus, 5000);
     const syncInterval = setInterval(loadSyncState, 3000);
 
-    // Track when window gets hidden to tray (Rust emits this event)
-    const unlistenHidden = listen('window-hidden', () => {
-      wasHidden.current = true;
-    });
-
-    // Lock when window is restored from tray (was hidden, now visible)
-    const appWindow = getCurrentWindow();
-    const unlisten = appWindow.onFocusChanged(({ payload: focused }) => {
-      if (focused && wasHidden.current) {
-        wasHidden.current = false;
-        // Re-read config to check if require_password is still on
-        invoke<AppConfig>('get_config').then(cfg => {
-          if (cfg?.require_password) {
-            setLocked(true);
-          }
-        });
-      }
+    // Lock when window is restored from tray (Rust emits this before showing)
+    const unlistenRestore = listen('tray-restore', () => {
+      invoke<AppConfig>('get_config').then(cfg => {
+        if (cfg?.require_password) {
+          setLocked(true);
+        }
+      });
     });
 
     return () => {
       clearInterval(interval);
       clearInterval(syncInterval);
-      unlistenHidden.then(fn => fn());
-      unlisten.then(fn => fn());
+      unlistenRestore.then(fn => fn());
     };
   }, [loadConfig, loadStatus, loadSyncState]);
 

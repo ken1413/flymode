@@ -119,6 +119,10 @@ fn main() {
                     match event.id().as_ref() {
                         "show" => {
                             if let Some(window) = app.get_webview_window("main") {
+                                // Emit restore event only if window was hidden (tray)
+                                if !window.is_visible().unwrap_or(true) {
+                                    let _ = window.emit("tray-restore", ());
+                                }
                                 let _ = window.show();
                                 let _ = window.unminimize();
                                 let _ = window.set_focus();
@@ -133,6 +137,9 @@ fn main() {
                 .on_tray_icon_event(|tray, event| {
                     if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, .. } = event {
                         if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            if !window.is_visible().unwrap_or(true) {
+                                let _ = window.emit("tray-restore", ());
+                            }
                             let _ = window.show();
                             let _ = window.unminimize();
                             let _ = window.set_focus();
@@ -155,7 +162,6 @@ fn main() {
                             api.prevent_close();
                             if let Some(win) = app_handle.get_webview_window("main") {
                                 let _ = win.hide();
-                                let _ = win.emit("window-hidden", ());
                             }
                         }
                     }
