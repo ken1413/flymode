@@ -285,9 +285,16 @@ impl NotesStore {
 
     pub fn delete(&self, id: &str) -> Result<(), NotesError> {
         let conn = self.get_conn()?;
+        let now = Utc::now();
+        // Recompute sync_hash so the deletion is detected by sync
+        let delete_hash = {
+            use sha2::{Digest, Sha256};
+            let data = format!("{}:deleted:{}", id, now.timestamp());
+            format!("{:x}", Sha256::digest(data.as_bytes()))
+        };
         conn.execute(
-            "UPDATE notes SET deleted = 1, updated_at = ?1 WHERE id = ?2",
-            rusqlite::params![Utc::now().to_rfc3339(), id],
+            "UPDATE notes SET deleted = 1, updated_at = ?1, sync_hash = ?2 WHERE id = ?3",
+            rusqlite::params![now.to_rfc3339(), delete_hash, id],
         )?;
         Ok(())
     }
