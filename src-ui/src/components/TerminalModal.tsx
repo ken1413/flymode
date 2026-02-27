@@ -96,10 +96,38 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
       .then((sid) => {
         sessionIdRef.current = sid;
 
-        // Forward keystrokes to backend
-        // xterm.js v5 has built-in CompositionHelper that handles IME natively.
-        // Do NOT add custom composition event listeners — they interfere and cause duplicates.
+        // IME handling for CJK input in WebKitGTK (Tauri on Linux).
+        // Problem: xterm.js's hidden textarea accumulates composed text across
+        // compositions. Backspace sends \x7f to remote but doesn't clear the
+        // textarea, so old text replays on the next composition.
+        // Fix: send composed text from compositionend, block onData during
+        // composition, and clear the textarea after each composition.
+        let composing = false;
+        const xtermTextarea = termRef.current?.querySelector('textarea') as HTMLTextAreaElement | null;
+        if (xtermTextarea) {
+          xtermTextarea.addEventListener('compositionstart', () => {
+            composing = true;
+          });
+          xtermTextarea.addEventListener('compositionend', (e: Event) => {
+            const ce = e as CompositionEvent;
+            if (ce.data && sessionIdRef.current) {
+              const encoded = new TextEncoder().encode(ce.data);
+              invoke('send_terminal_input', {
+                sessionId: sessionIdRef.current,
+                data: Array.from(encoded),
+              }).catch(() => {});
+            }
+            // Clear textarea to prevent accumulation, then unblock onData
+            setTimeout(() => {
+              xtermTextarea.value = '';
+              composing = false;
+            }, 50);
+          });
+        }
+
+        // Forward non-IME keystrokes to backend (blocked during composition)
         term.onData((data: string) => {
+          if (composing) return;
           if (sessionIdRef.current) {
             const encoded = new TextEncoder().encode(data);
             invoke('send_terminal_input', {
