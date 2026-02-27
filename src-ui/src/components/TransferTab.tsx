@@ -13,7 +13,7 @@ export function TransferTab() {
   const [remotePath, setRemotePath] = useState('');
   const [localPath, setLocalPath] = useState('');
   const [browsePath, setBrowsePath] = useState('/home');
-  const [remoteFiles, setRemoteFiles] = useState<Array<{ name: string; path: string; is_dir: boolean; size: number }>>([]);
+  const [remoteFiles, setRemoteFiles] = useState<RemoteFileInfo[]>([]);
   const [browsing, setBrowsing] = useState(false);
 
   const loadQueue = useCallback(async () => {
@@ -51,10 +51,20 @@ export function TransferTab() {
     }
   };
 
+  const openUploadModal = (peer: PeerDevice) => {
+    setSelectedPeer(peer);
+    setRemotePath('/home/' + (peer.ssh_user || '') + '/');
+    setLocalPath('');
+    setShowUploadModal(true);
+  };
+
   const startUpload = async () => {
     if (!selectedPeer || !localPath || !remotePath) return;
 
-    const fileName = localPath.split('/').pop() || 'file';
+    // Extract filename from local path (handle both / and \ separators)
+    const fileName = localPath.replace(/\\/g, '/').split('/').pop() || 'file';
+
+    // If remote path ends with /, append filename; otherwise use as-is
     const fullRemotePath = remotePath.endsWith('/')
       ? remotePath + fileName
       : remotePath;
@@ -65,6 +75,7 @@ export function TransferTab() {
         localPath,
         remotePath: fullRemotePath,
       });
+      toast.success('Upload started: ' + fileName);
       setShowUploadModal(false);
       setLocalPath('');
       setRemotePath('');
@@ -90,7 +101,7 @@ export function TransferTab() {
         remotePath: filePath,
         localPath: localFilePath,
       });
-      setShowBrowseModal(false);
+      toast.success('Download started: ' + fileName);
       await loadQueue();
     } catch (e) {
       toast.error('Failed to start download: ' + e);
@@ -131,10 +142,20 @@ export function TransferTab() {
     }
   };
 
+  const navigateUp = () => {
+    if (!selectedPeer) return;
+    // Go to parent directory
+    const parts = browsePath.replace(/\/+$/, '').split('/');
+    parts.pop();
+    const parent = parts.join('/') || '/';
+    browseRemote(selectedPeer, parent);
+  };
+
   const openBrowseModal = (peer: PeerDevice) => {
     setSelectedPeer(peer);
-    setBrowsePath('/home');
-    browseRemote(peer, '/home');
+    const startPath = '/home/' + (peer.ssh_user || '');
+    setBrowsePath(startPath);
+    browseRemote(peer, startPath);
     setShowBrowseModal(true);
   };
 
@@ -169,13 +190,6 @@ export function TransferTab() {
       <div class="card">
         <div class="card-header">
           <span class="card-title">File Transfer</span>
-          <button
-            class="btn btn-primary btn-sm"
-            onClick={() => setShowUploadModal(true)}
-            disabled={peers.length === 0}
-          >
-            + Upload File
-          </button>
         </div>
 
         {peers.length === 0 ? (
@@ -197,11 +211,7 @@ export function TransferTab() {
                 <div class="peer-action-buttons">
                   <button
                     class="btn btn-sm btn-icon"
-                    onClick={() => {
-                      setSelectedPeer(peer);
-                      setRemotePath('/home/' + peer.ssh_user + '/');
-                      setShowUploadModal(true);
-                    }}
+                    onClick={() => openUploadModal(peer)}
                     title="Upload file"
                   >
                     📤
@@ -233,7 +243,9 @@ export function TransferTab() {
               </div>
               <div class="transfer-info">
                 <div class="transfer-name">{t.file_name}</div>
-                <div class="transfer-peer">to/from {t.peer_name}</div>
+                <div class="transfer-peer">
+                  {t.direction === 'Upload' ? 'to' : 'from'} {t.peer_name}
+                </div>
                 <div class="transfer-progress-bar">
                   <div
                     class="transfer-progress-fill"
@@ -279,7 +291,12 @@ export function TransferTab() {
               </div>
               <div class="transfer-info">
                 <div class="transfer-name">{t.file_name}</div>
-                <div class="transfer-peer">to/from {t.peer_name}</div>
+                <div class="transfer-peer">
+                  {t.direction === 'Upload' ? 'to' : 'from'} {t.peer_name}
+                </div>
+                {t.total_bytes > 0 && (
+                  <div class="transfer-stats">{formatSize(t.total_bytes)}</div>
+                )}
               </div>
               <div class="transfer-status" style={{ color: getStatusColor(t.status) }}>
                 {t.status}
@@ -315,7 +332,7 @@ export function TransferTab() {
             </div>
 
             <div class="form-group">
-              <label>Remote Path</label>
+              <label>Remote Path (directory ending with / or full file path)</label>
               <input
                 type="text"
                 class="form-control"
@@ -349,6 +366,14 @@ export function TransferTab() {
 
             <div class="form-group">
               <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  class="btn btn-icon btn-sm"
+                  onClick={navigateUp}
+                  disabled={browsePath === '/'}
+                  title="Go up"
+                >
+                  ⬆
+                </button>
                 <input
                   type="text"
                   class="form-control"

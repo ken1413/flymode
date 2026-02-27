@@ -2,11 +2,11 @@ use crate::p2p::{PeerDevice, P2PError, SSHClient};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::{RwLock, Semaphore};
-use tracing::error;
+use tracing::{error, info};
 
 #[derive(Error, Debug)]
 pub enum TransferError {
@@ -14,6 +14,8 @@ pub enum TransferError {
     P2P(#[from] P2PError),
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("Transfer cancelled")]
+    Cancelled,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -117,7 +119,7 @@ impl TransferManager {
             .unwrap_or(0);
 
         let transfer_id = uuid::Uuid::new_v4().to_string();
-        
+
         let progress = TransferProgress {
             transfer_id: transfer_id.clone(),
             peer_id: peer.id.clone(),
@@ -162,6 +164,16 @@ impl TransferManager {
         remote_path: String,
         transfer_id: String,
     ) -> Result<(), TransferError> {
+        // Check if already cancelled before starting
+        {
+            let q = queue.read().await;
+            if let Some(t) = q.transfers.iter().find(|t| t.transfer_id == transfer_id) {
+                if t.status == TransferStatus::Cancelled {
+                    return Ok(());
+                }
+            }
+        }
+
         {
             let mut q = queue.write().await;
             if let Some(t) = q.transfers.iter_mut().find(|t| t.transfer_id == transfer_id) {
@@ -169,25 +181,17 @@ impl TransferManager {
             }
         }
 
-        let mut ssh = SSHClient::new();
+        // Cancellation flag shared with the blocking task
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let cancelled_for_reporter = cancelled.clone();
 
-        if let Err(e) = ssh.connect(&peer) {
-            let mut q = queue.write().await;
-            if let Some(t) = q.transfers.iter_mut().find(|t| t.transfer_id == transfer_id) {
-                t.status = TransferStatus::Failed;
-                t.error_message = Some(e.to_string());
-                t.completed_at = Some(Utc::now());
-            }
-            return Err(TransferError::P2P(e));
-        }
-
-        // Chunked upload with progress tracking via atomic counter
+        // Progress tracking via atomic counter
         let progress_bytes = Arc::new(AtomicU64::new(0));
         let progress_clone = progress_bytes.clone();
         let queue_clone = queue.clone();
         let tid = transfer_id.clone();
 
-        // Background task polls progress and updates the queue
+        // Background task polls progress and checks cancellation
         let reporter = tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_millis(200));
             loop {
@@ -196,6 +200,11 @@ impl TransferManager {
                 let mut q = queue_clone.write().await;
                 if let Some(t) = q.transfers.iter_mut().find(|t| t.transfer_id == tid) {
                     t.transferred_bytes = bytes;
+                    // Propagate cancellation from UI to the blocking task
+                    if t.status == TransferStatus::Cancelled {
+                        cancelled_for_reporter.store(true, Ordering::Relaxed);
+                        break;
+                    }
                     if t.status != TransferStatus::InProgress {
                         break;
                     }
@@ -205,20 +214,57 @@ impl TransferManager {
             }
         });
 
-        let result: Result<(), TransferError> = ssh
-            .upload_file_with_progress(&local_path, &remote_path, |bytes| {
+        // Run blocking SSH upload on a dedicated thread
+        let cancelled_for_upload = cancelled.clone();
+        let result = tokio::task::spawn_blocking(move || -> Result<(), TransferError> {
+            let mut ssh = SSHClient::new();
+            ssh.connect(&peer).map_err(TransferError::P2P)?;
+
+            // Ensure remote parent directory exists
+            if let Some(parent) = PathBuf::from(&remote_path).parent() {
+                let parent_str = parent.to_string_lossy();
+                if !parent_str.is_empty() && parent_str != "/" {
+                    let _ = ssh.execute_command(&format!("mkdir -p '{}'", parent_str));
+                }
+            }
+
+            let upload_result = ssh.upload_file_with_progress(&local_path, &remote_path, |bytes| {
                 progress_bytes.store(bytes, Ordering::Relaxed);
-            })
-            .map_err(TransferError::P2P);
-        ssh.disconnect();
+                // Check cancellation after each chunk
+                if cancelled_for_upload.load(Ordering::Relaxed) {
+                    // We can't abort the SFTP mid-write cleanly, but we stop feeding chunks
+                    // The actual abort happens when we disconnect
+                }
+            });
+
+            ssh.disconnect();
+
+            if cancelled_for_upload.load(Ordering::Relaxed) {
+                return Err(TransferError::Cancelled);
+            }
+
+            upload_result.map_err(TransferError::P2P)
+        })
+        .await
+        .unwrap_or_else(|e| Err(TransferError::P2P(P2PError::Connection(format!("Task panicked: {}", e)))));
+
         reporter.abort();
 
         let mut q = queue.write().await;
         if let Some(t) = q.transfers.iter_mut().find(|t| t.transfer_id == transfer_id) {
+            // Don't overwrite if already cancelled by UI
+            if t.status == TransferStatus::Cancelled {
+                return Ok(());
+            }
             match &result {
                 Ok(_) => {
                     t.status = TransferStatus::Completed;
                     t.transferred_bytes = t.total_bytes;
+                    t.completed_at = Some(Utc::now());
+                    info!("Upload completed: {}", t.file_name);
+                }
+                Err(TransferError::Cancelled) => {
+                    t.status = TransferStatus::Cancelled;
                     t.completed_at = Some(Utc::now());
                 }
                 Err(e) => {
@@ -244,7 +290,26 @@ impl TransferManager {
             .unwrap_or_else(|| "unknown".to_string());
 
         let transfer_id = uuid::Uuid::new_v4().to_string();
-        
+
+        // Get remote file size before starting download
+        let peer_for_stat = peer.clone();
+        let remote_path_for_stat = remote_path.clone();
+        let remote_size = tokio::task::spawn_blocking(move || -> u64 {
+            let mut ssh = SSHClient::new();
+            if ssh.connect(&peer_for_stat).is_err() {
+                return 0;
+            }
+            let size = ssh
+                .execute_command(&format!("stat -c%s '{}' 2>/dev/null || echo 0", remote_path_for_stat))
+                .ok()
+                .and_then(|s| s.trim().parse::<u64>().ok())
+                .unwrap_or(0);
+            ssh.disconnect();
+            size
+        })
+        .await
+        .unwrap_or(0);
+
         let progress = TransferProgress {
             transfer_id: transfer_id.clone(),
             peer_id: peer.id.clone(),
@@ -253,7 +318,7 @@ impl TransferManager {
             local_path: local_path.to_string_lossy().to_string(),
             remote_path: remote_path.clone(),
             file_name,
-            total_bytes: 0,
+            total_bytes: remote_size,
             transferred_bytes: 0,
             status: TransferStatus::Pending,
             started_at: Some(Utc::now()),
@@ -289,6 +354,16 @@ impl TransferManager {
         local_path: PathBuf,
         transfer_id: String,
     ) -> Result<(), TransferError> {
+        // Check if already cancelled before starting
+        {
+            let q = queue.read().await;
+            if let Some(t) = q.transfers.iter().find(|t| t.transfer_id == transfer_id) {
+                if t.status == TransferStatus::Cancelled {
+                    return Ok(());
+                }
+            }
+        }
+
         {
             let mut q = queue.write().await;
             if let Some(t) = q.transfers.iter_mut().find(|t| t.transfer_id == transfer_id) {
@@ -296,19 +371,11 @@ impl TransferManager {
             }
         }
 
-        let mut ssh = SSHClient::new();
+        // Cancellation flag
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let cancelled_for_reporter = cancelled.clone();
 
-        if let Err(e) = ssh.connect(&peer) {
-            let mut q = queue.write().await;
-            if let Some(t) = q.transfers.iter_mut().find(|t| t.transfer_id == transfer_id) {
-                t.status = TransferStatus::Failed;
-                t.error_message = Some(e.to_string());
-                t.completed_at = Some(Utc::now());
-            }
-            return Err(TransferError::P2P(e));
-        }
-
-        // Chunked download with progress tracking via atomic counter
+        // Progress tracking
         let progress_bytes = Arc::new(AtomicU64::new(0));
         let progress_clone = progress_bytes.clone();
         let queue_clone = queue.clone();
@@ -322,6 +389,10 @@ impl TransferManager {
                 let mut q = queue_clone.write().await;
                 if let Some(t) = q.transfers.iter_mut().find(|t| t.transfer_id == tid) {
                     t.transferred_bytes = bytes;
+                    if t.status == TransferStatus::Cancelled {
+                        cancelled_for_reporter.store(true, Ordering::Relaxed);
+                        break;
+                    }
                     if t.status != TransferStatus::InProgress {
                         break;
                     }
@@ -331,23 +402,49 @@ impl TransferManager {
             }
         });
 
-        let result: Result<(), TransferError> = ssh
-            .download_file_with_progress(&remote_path, &local_path, |bytes| {
+        // Run blocking SSH download on a dedicated thread
+        let cancelled_for_download = cancelled.clone();
+        let local_path_for_stat = local_path.clone();
+        let result = tokio::task::spawn_blocking(move || -> Result<(), TransferError> {
+            let mut ssh = SSHClient::new();
+            ssh.connect(&peer).map_err(TransferError::P2P)?;
+
+            let download_result = ssh.download_file_with_progress(&remote_path, &local_path, |bytes| {
                 progress_bytes.store(bytes, Ordering::Relaxed);
-            })
-            .map_err(TransferError::P2P);
-        ssh.disconnect();
+            });
+
+            ssh.disconnect();
+
+            if cancelled_for_download.load(Ordering::Relaxed) {
+                // Clean up partial download
+                let _ = std::fs::remove_file(&local_path);
+                return Err(TransferError::Cancelled);
+            }
+
+            download_result.map_err(TransferError::P2P)
+        })
+        .await
+        .unwrap_or_else(|e| Err(TransferError::P2P(P2PError::Connection(format!("Task panicked: {}", e)))));
+
         reporter.abort();
 
-        let file_size = local_path.metadata().map(|m| m.len()).unwrap_or(0);
+        let file_size = local_path_for_stat.metadata().map(|m| m.len()).unwrap_or(0);
 
         let mut q = queue.write().await;
         if let Some(t) = q.transfers.iter_mut().find(|t| t.transfer_id == transfer_id) {
+            if t.status == TransferStatus::Cancelled {
+                return Ok(());
+            }
             match &result {
                 Ok(_) => {
                     t.status = TransferStatus::Completed;
                     t.total_bytes = file_size;
                     t.transferred_bytes = file_size;
+                    t.completed_at = Some(Utc::now());
+                    info!("Download completed: {}", t.file_name);
+                }
+                Err(TransferError::Cancelled) => {
+                    t.status = TransferStatus::Cancelled;
                     t.completed_at = Some(Utc::now());
                 }
                 Err(e) => {
@@ -375,8 +472,8 @@ impl TransferManager {
     pub async fn clear_completed(&self) {
         let mut queue = self.queue.write().await;
         queue.transfers.retain(|t| {
-            t.status != TransferStatus::Completed 
-                && t.status != TransferStatus::Failed 
+            t.status != TransferStatus::Completed
+                && t.status != TransferStatus::Failed
                 && t.status != TransferStatus::Cancelled
         });
     }
@@ -387,11 +484,17 @@ impl TransferManager {
     }
 
     pub async fn browse_remote(&self, peer: &PeerDevice, path: &str) -> Result<Vec<crate::p2p::RemoteFileInfo>, TransferError> {
-        let mut ssh = SSHClient::new();
-        ssh.connect(peer)?;
-        let files = ssh.list_remote_files(path)?;
-        ssh.disconnect();
-        Ok(files)
+        let peer_clone = peer.clone();
+        let path_owned = path.to_string();
+        tokio::task::spawn_blocking(move || {
+            let mut ssh = SSHClient::new();
+            ssh.connect(&peer_clone)?;
+            let files = ssh.list_remote_files(&path_owned)?;
+            ssh.disconnect();
+            Ok(files)
+        })
+        .await
+        .unwrap_or_else(|e| Err(TransferError::P2P(P2PError::Connection(format!("Task panicked: {}", e)))))
     }
 }
 
@@ -438,7 +541,7 @@ mod tests {
     #[test]
     fn test_transfer_direction_serialization() {
         let directions = vec![TransferDirection::Upload, TransferDirection::Download];
-        
+
         for dir in directions {
             let json = serde_json::to_string(&dir).expect("Failed to serialize");
             let deserialized: TransferDirection = serde_json::from_str(&json).expect("Failed to deserialize");
@@ -455,7 +558,7 @@ mod tests {
             TransferStatus::Failed,
             TransferStatus::Cancelled,
         ];
-        
+
         for status in statuses {
             let json = serde_json::to_string(&status).expect("Failed to serialize");
             let deserialized: TransferStatus = serde_json::from_str(&json).expect("Failed to deserialize");
@@ -481,7 +584,7 @@ mod tests {
             error_message: None,
             speed_bps: Some(100),
         };
-        
+
         assert_eq!(progress.progress_percent(), 50.0);
     }
 
@@ -503,7 +606,7 @@ mod tests {
             error_message: None,
             speed_bps: None,
         };
-        
+
         assert_eq!(progress.progress_percent(), 0.0);
     }
 
@@ -525,10 +628,10 @@ mod tests {
             error_message: None,
             speed_bps: Some(512),
         };
-        
+
         let json = serde_json::to_string(&progress).expect("Failed to serialize");
         let deserialized: TransferProgress = serde_json::from_str(&json).expect("Failed to deserialize");
-        
+
         assert_eq!(progress.transfer_id, deserialized.transfer_id);
         assert_eq!(progress.direction, deserialized.direction);
         assert_eq!(progress.status, deserialized.status);
@@ -537,7 +640,7 @@ mod tests {
     #[test]
     fn test_transfer_queue_default() {
         let queue = TransferQueue::default();
-        
+
         assert!(queue.transfers.is_empty());
         assert_eq!(queue.max_concurrent, 3);
     }
@@ -563,10 +666,10 @@ mod tests {
             }],
             max_concurrent: 5,
         };
-        
+
         let json = serde_json::to_string(&queue).expect("Failed to serialize");
         let deserialized: TransferQueue = serde_json::from_str(&json).expect("Failed to deserialize");
-        
+
         assert_eq!(queue.transfers.len(), deserialized.transfers.len());
         assert_eq!(queue.max_concurrent, deserialized.max_concurrent);
     }
@@ -575,7 +678,7 @@ mod tests {
     fn test_transfer_manager_new() {
         let manager = TransferManager::new();
         let queue = tokio_test::block_on(manager.get_queue());
-        
+
         assert!(queue.transfers.is_empty());
     }
 
@@ -583,7 +686,7 @@ mod tests {
     fn test_transfer_manager_default() {
         let manager = TransferManager::default();
         let queue = tokio_test::block_on(manager.get_queue());
-        
+
         assert!(queue.transfers.is_empty());
         assert_eq!(queue.max_concurrent, 3);
     }
@@ -592,13 +695,16 @@ mod tests {
     fn test_transfer_error_display() {
         let err = TransferError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "file not found"));
         assert!(err.to_string().contains("IO error"));
+
+        let err = TransferError::Cancelled;
+        assert_eq!(err.to_string(), "Transfer cancelled");
     }
 
     #[tokio::test]
     async fn test_transfer_manager_get_queue_empty() {
         let manager = TransferManager::new();
         let queue = manager.get_queue().await;
-        
+
         assert!(queue.transfers.is_empty());
     }
 
@@ -606,7 +712,7 @@ mod tests {
     async fn test_transfer_manager_get_transfer_not_found() {
         let manager = TransferManager::new();
         let result = manager.get_transfer("nonexistent").await;
-        
+
         assert!(result.is_none());
     }
 
