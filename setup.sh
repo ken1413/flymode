@@ -207,6 +207,48 @@ build_app() {
     ok "Build complete"
 }
 
+# ── SSH server ─────────────────────────────────────────────────
+ensure_ssh_server() {
+    info "Checking SSH server (required for P2P sync/transfer)..."
+
+    if [ "$OS" = "linux" ]; then
+        if systemctl is-active --quiet sshd 2>/dev/null || systemctl is-active --quiet ssh 2>/dev/null; then
+            ok "SSH server is running"
+            return
+        fi
+
+        if ! need_cmd sshd; then
+            info "Installing openssh-server..."
+            case "$PKG_MGR" in
+                apt)    sudo apt-get install -y -qq openssh-server ;;
+                dnf)    sudo dnf install -y openssh-server ;;
+                pacman) sudo pacman -S --noconfirm openssh ;;
+            esac
+        fi
+
+        # Enable and start
+        if systemctl list-unit-files ssh.service &>/dev/null; then
+            sudo systemctl enable --now ssh
+        elif systemctl list-unit-files sshd.service &>/dev/null; then
+            sudo systemctl enable --now sshd
+        fi
+
+        if systemctl is-active --quiet sshd 2>/dev/null || systemctl is-active --quiet ssh 2>/dev/null; then
+            ok "SSH server installed and running"
+        else
+            warn "SSH server installed but could not start — P2P sync may not work"
+        fi
+
+    elif [ "$OS" = "macos" ]; then
+        # macOS has built-in SSH, just needs Remote Login enabled
+        if sudo systemsetup -getremotelogin 2>/dev/null | grep -qi "on"; then
+            ok "SSH (Remote Login) is enabled"
+        else
+            warn "SSH (Remote Login) is OFF. Enable it in: System Settings > General > Sharing > Remote Login"
+        fi
+    fi
+}
+
 # ── install binary ─────────────────────────────────────────────
 install_binary() {
     mkdir -p "$BIN_DIR"
@@ -268,7 +310,7 @@ DESKTOP
 main() {
     echo ""
     echo -e "${CYAN}╔══════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║        FlyMode Installer v0.2        ║${NC}"
+    echo -e "${CYAN}║          FlyMode Installer           ║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
     echo ""
 
@@ -279,13 +321,25 @@ main() {
     install_gh
     clone_repo
     install_tauri_cli
+    ensure_ssh_server
     build_app
     install_binary
     install_desktop_entry
 
+    # Read version from Cargo.toml
+    local app_version="unknown"
+    if [ -f "$INSTALL_DIR/src-tauri/Cargo.toml" ]; then
+        app_version=$(grep '^version' "$INSTALL_DIR/src-tauri/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+    fi
+    # Read git short hash
+    local git_hash=""
+    if [ -d "$INSTALL_DIR/.git" ]; then
+        git_hash=$(git -C "$INSTALL_DIR" rev-parse --short HEAD 2>/dev/null || echo "")
+    fi
+
     echo ""
     echo -e "${GREEN}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}  FlyMode installed successfully!${NC}"
+    echo -e "${GREEN}  FlyMode v${app_version} (${git_hash}) installed!${NC}"
     echo -e "${GREEN}══════════════════════════════════════${NC}"
     echo ""
     echo "  Run:  flymode"
