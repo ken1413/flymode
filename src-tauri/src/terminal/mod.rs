@@ -158,9 +158,7 @@ fn run_pty_loop(
         .as_mut()
         .ok_or_else(|| TerminalError::Ssh("No SSH session".to_string()))?;
 
-    // Set non-blocking for the polling loop
-    session.set_blocking(false);
-
+    // Setup phase must be blocking
     let mut channel = session
         .channel_session()
         .map_err(|e: ssh2::Error| TerminalError::Ssh(e.to_string()))?;
@@ -172,6 +170,9 @@ fn run_pty_loop(
     channel
         .exec("openclaw-tui")
         .map_err(|e: ssh2::Error| TerminalError::Ssh(e.to_string()))?;
+
+    // Switch to non-blocking AFTER setup is complete
+    session.set_blocking(false);
 
     let mut buf = [0u8; 4096];
 
