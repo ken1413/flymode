@@ -256,6 +256,9 @@ export function TransferTab() {
                 <div class="transfer-peer">
                   {t.direction === 'Upload' ? 'to' : 'from'} {t.peer_name}
                 </div>
+                <div class="transfer-path" title={t.direction === 'Upload' ? t.remote_path : t.local_path}>
+                  {t.direction === 'Upload' ? t.remote_path : t.local_path}
+                </div>
                 <div class="transfer-progress-bar">
                   <div
                     class="transfer-progress-fill"
@@ -303,6 +306,9 @@ export function TransferTab() {
                 <div class="transfer-name">{t.file_name}</div>
                 <div class="transfer-peer">
                   {t.direction === 'Upload' ? 'to' : 'from'} {t.peer_name}
+                </div>
+                <div class="transfer-path" title={t.direction === 'Upload' ? t.remote_path : t.local_path}>
+                  {t.direction === 'Upload' ? t.remote_path : t.local_path}
                 </div>
                 {t.total_bytes > 0 && (
                   <div class="transfer-stats">{formatSize(t.total_bytes)}</div>
