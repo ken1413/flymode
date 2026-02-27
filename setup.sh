@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# FlyMode — one-line installer (private repo, requires gh auth)
-# curl -fsSL https://gist.githubusercontent.com/ken1413/756e1cd8131583561c138a33cc401984/raw/setup.sh | bash
+# FlyMode — one-line installer
+# curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/setup.sh | bash
 set -euo pipefail
 
 REPO="ken1413/flymode"

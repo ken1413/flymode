@@ -1,417 +1,328 @@
-# FlyMode - Wireless Scheduler + P2P Sync + Notes
+# FlyMode 使用說明
 
-跨平台桌面應用程式，整合無線控制、P2P 同步、便利貼筆記三大功能。
+跨平台桌面應用程式 — 無線控制 + P2P 裝置同步 + 便利貼 + 檔案傳輸 + 遠端終端機
+
+版本：v0.2.0 | 最後更新：2026-02-28
 
 ---
 
 ## 目錄
 
-1. [專案概述](#專案概述)
-2. [功能總覽](#功能總覽)
-3. [系統架構](#系統架構)
-4. [技術棧](#技術棧)
-5. [目錄結構](#目錄結構)
-6. [核心模組設計](#核心模組設計)
-7. [P2P 同步架構](#p2p-同步架構)
-8. [便利貼模組](#便利貼模組)
-9. [檔案傳輸](#檔案傳輸)
-10. [API 參考](#api-參考)
-11. [建置與部署](#建置與部署)
-12. [安全性考量](#安全性考量)
+1. [安裝](#1-安裝)
+2. [安裝後設定](#2-安裝後設定)
+3. [兩台電腦配對教學](#3-兩台電腦配對教學)
+4. [功能說明](#4-功能說明)
+   - [便利貼筆記](#41-便利貼筆記-📝)
+   - [裝置管理](#42-裝置管理-🔗)
+   - [資料同步](#43-資料同步-🔄)
+   - [檔案傳輸](#44-檔案傳輸-📤)
+   - [遠端終端機](#45-遠端終端機)
+   - [無線排程](#46-無線排程-⏰)
+   - [快速操作](#47-快速操作-⚡)
+   - [設定](#48-設定-⚙️)
+5. [系統架構](#5-系統架構)
+6. [資料存儲](#6-資料存儲)
+7. [安全性](#7-安全性)
+8. [疑難排解](#8-疑難排解)
+9. [技術參考](#9-技術參考)
 
 ---
 
-## 專案概述
+## 1. 安裝
 
-### 背景
+### 1.1 一鍵安裝（建議）
 
-FlyMode 是一款整合多種實用功能的桌面應用程式：
+在 Linux (Ubuntu/Fedora/Arch) 或 macOS 上執行：
 
-1. **無線控制**：定時管理 WiFi、藍牙、飛航模式
-2. **P2P 同步**：透過 Tailscale/SSH 在裝置間同步資料
-3. **便利貼筆記**：多顏色多類別的便利貼系統
-4. **檔案傳輸**：裝置間直接傳送檔案
-
-### 設計理念
-
-- **P2P 架構**：無需中央伺服器，裝置間直接通訊
-- **跨平台**：支援 Linux、Windows、macOS
-- **輕量高效**：使用 Rust + Tauri，資源佔用低
-- **安全可靠**：SSH 加密傳輸，本地資料庫存儲
-
----
-
-## 功能總覽
-
-### 1. 無線排程 (Wireless Scheduler)
-
-| 功能 | 說明 |
-|------|------|
-| 定時規則 | 設定時間範圍和星期幾自動開關 |
-| 快速操作 | 即時切換 WiFi/藍牙/飛航模式 |
-| 自定義命令 | 執行任意 CLI 命令 |
-| 系統匣 | 背景執行，最小化到系統匣 |
-
-### 2. P2P 同步 (Peer-to-Peer Sync)
-
-| 功能 | 說明 |
-|------|------|
-| 裝置管理 | 新增、編輯、移除遠端裝置 |
-| Tailscale 發現 | 自動發現 Tailscale 網路中的裝置 |
-| 信任機制 | 標記信任裝置以啟用自動同步 |
-| SSH 連線 | 使用 SSH 金鑰或密碼認證 |
-
-### 3. 便利貼筆記 (Sticky Notes)
-
-| 功能 | 說明 |
-|------|------|
-| 多顏色 | 8 種顏色選擇（黃、粉、藍、綠、紫、橙、白、灰）|
-| 分類 | 7 種類別（一般、工作、個人、點子、任務、重要、封存）|
-| 標籤 | 自定義標籤系統 |
-| 釘選 | 置頂重要筆記 |
-| 同步 | 自動同步到信任裝置 |
-
-### 4. 檔案傳輸 (File Transfer)
-
-| 功能 | 說明 |
-|------|------|
-| 上傳 | 傳送檔案到遠端裝置 |
-| 下載 | 從遠端裝置下載檔案 |
-| 瀏覽 | 瀏覽遠端檔案系統 |
-| 佇列 | 管理傳輸佇列 |
-
----
-
-## 系統架構
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          FlyMode App v0.2                           │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │                     Frontend (Preact + TypeScript)           │  │
-│  │  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐     │  │
-│  │  │ Notes  │ │  P2P   │ │  Sync  │ │Transfer│ │Schedule│     │  │
-│  │  │  Tab   │ │  Tab   │ │  Tab   │ │  Tab   │ │  Tab   │     │  │
-│  │  └────────┘ └────────┘ └────────┘ └────────┘ └────────┘     │  │
-│  └────────────────────────────┬─────────────────────────────────┘  │
-│                               │ Tauri IPC                          │
-│  ┌────────────────────────────▼─────────────────────────────────┐  │
-│  │                     Backend (Rust + Tauri)                    │  │
-│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐              │  │
-│  │  │   Notes     │ │     P2P     │ │    Sync     │              │  │
-│  │  │   Store     │ │   Manager   │ │   Engine    │              │  │
-│  │  │  (SQLite)   │ │   (SSH2)    │ │             │              │  │
-│  │  └─────────────┘ └─────────────┘ └─────────────┘              │  │
-│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐              │  │
-│  │  │  Transfer   │ │  Scheduler  │ │  Wireless   │              │  │
-│  │  │   Manager   │ │             │ │  Controller │              │  │
-│  │  └─────────────┘ └─────────────┘ └─────────────┘              │  │
-│  └────────────────────────────┬─────────────────────────────────┘  │
-│                               │                                    │
-│  ┌────────────────────────────▼─────────────────────────────────┐  │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │  │
-│  │  │   Tailscale  │  │     SSH      │  │   SQLite     │        │  │
-│  │  │   Network    │  │   Protocol   │  │   Database   │        │  │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘        │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-│                                                                     │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │                    System Tray + Auto Start                   │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+```bash
+curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/setup.sh | bash
 ```
 
+安裝腳本會自動處理：
+
+| 步驟 | 說明 |
+|------|------|
+| 系統依賴 | GTK3, WebKit2GTK, OpenSSL, pkg-config 等 |
+| Rust 工具鏈 | 自動安裝 `rustup` + stable toolchain |
+| Node.js 22 LTS | 前端建置需要 |
+| GitHub CLI (`gh`) | 驗證帳號以 clone repo |
+| Tauri CLI | `cargo install tauri-cli` |
+| SSH Server | `openssh-server`，自動啟動 |
+| 編譯 | `cargo tauri build`（release 模式） |
+| 安裝 | binary 放到 `~/.local/bin/flymode` |
+| 桌面捷徑 | Linux 建立 `.desktop` 文件 |
+
+> **注意：** 首次安裝需要 GitHub 帳號認證。安裝過程中 `gh auth login` 會引導你登入。
+
+安裝完成後啟動：
+
+```bash
+flymode
+```
+
+### 1.2 手動安裝
+
+#### 系統需求
+
+| 工具 | 最低版本 | 說明 |
+|------|---------|------|
+| Rust | 1.70+ | 後端編譯 |
+| Node.js | 18+ | 前端建置 |
+| npm | 9+ | 套件管理 |
+
+#### Linux (Ubuntu/Debian) 系統依賴
+
+```bash
+sudo apt install build-essential curl wget git pkg-config \
+    libgtk-3-dev libwebkit2gtk-4.1-dev \
+    libayatana-appindicator3-dev librsvg2-dev patchelf \
+    libssl-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+```
+
+#### Linux (Fedora)
+
+```bash
+sudo dnf install gcc gcc-c++ make curl wget git pkg-config \
+    gtk3-devel webkit2gtk4.1-devel \
+    libappindicator-gtk3-devel librsvg2-devel \
+    openssl-devel libsoup3-devel javascriptcoregtk4.1-devel
+```
+
+#### Linux (Arch)
+
+```bash
+sudo pacman -Syu --needed base-devel curl wget git pkg-config \
+    gtk3 webkit2gtk-4.1 libappindicator-gtk3 librsvg patchelf \
+    openssl libsoup3
+```
+
+#### macOS
+
+```bash
+# 安裝 Xcode 命令列工具
+xcode-select --install
+
+# 安裝 Homebrew（若尚未安裝）
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+#### 編譯與安裝
+
+```bash
+# Clone
+git clone https://github.com/ken1413/flymode.git
+cd flymode
+
+# 安裝前端依賴
+cd src-ui && npm install && cd ..
+
+# 編譯
+cargo tauri build
+
+# 安裝到 PATH
+mkdir -p ~/.local/bin
+cp target/release/flymode ~/.local/bin/
+```
+
+### 1.3 更新
+
+重新執行一鍵安裝腳本即可。已有的 repo 會 `git pull`，然後重新編譯：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/setup.sh | bash
+```
+
+或手動更新：
+
+```bash
+cd ~/app/flymode
+git pull
+cd src-ui && npm install && cd ..
+cargo tauri build
+cp target/release/flymode ~/.local/bin/
+```
+
 ---
 
-## 技術棧
+## 2. 安裝後設定
 
-### 後端 (Rust)
+安裝程式只處理編譯和安裝。要使用 P2P 同步和檔案傳輸功能，需要額外設定。
 
-| 套件 | 版本 | 用途 |
+### 2.1 SSH Server（必要）
+
+兩台要互相通訊的電腦**都**需要 SSH Server。安裝腳本會自動處理，但若手動安裝則需自行設定：
+
+```bash
+# Ubuntu/Debian
+sudo apt install openssh-server
+sudo systemctl enable --now ssh
+
+# Fedora
+sudo dnf install openssh-server
+sudo systemctl enable --now sshd
+
+# Arch
+sudo pacman -S openssh
+sudo systemctl enable --now sshd
+```
+
+macOS: 系統設定 → 一般 → 共享 → 遠端登入 → 開啟
+
+#### SSH 金鑰認證（建議）
+
+使用金鑰認證可免除每次輸入密碼：
+
+```bash
+# 在本機產生金鑰（若尚未有）
+ssh-keygen -t ed25519
+
+# 複製公鑰到遠端電腦
+ssh-copy-id user@remote-ip
+```
+
+完成後，FlyMode 會自動使用 `~/.ssh/id_ed25519` 或 `~/.ssh/id_rsa` 連線。
+
+### 2.2 Tailscale（建議）
+
+Tailscale 讓兩台不在同一個區域網路的電腦也能直接連線（如家裡和辦公室）。
+
+```bash
+# 安裝 Tailscale
+curl -fsSL https://tailscale.com/install.sh | sh
+
+# 啟動並登入
+sudo tailscale up
+```
+
+兩台電腦登入同一個 Tailscale 帳號後，FlyMode 會**自動發現**對方。
+
+### 2.3 防火牆（必要時）
+
+FlyMode 需要以下 port：
+
+| Port | 協議 | 用途 |
 |------|------|------|
-| `tauri` | 2.x | 桌面應用框架 |
-| `tauri-plugin-shell` | 2.x | 執行外部命令 |
-| `tauri-plugin-dialog` | 2.x | 檔案對話框 |
-| `tauri-plugin-fs` | 2.x | 檔案系統操作 |
-| `tokio` | 1.x | 非同步運行時 |
-| `rusqlite` | 0.31 | SQLite 資料庫 |
-| `ssh2` | 0.9 | SSH 通訊協定 |
-| `serde` | 1.x | 序列化 |
-| `chrono` | 0.4 | 時間處理 |
-| `sha2` | 0.10 | 雜湊計算 |
+| 4827 | TCP | 裝置配對請求 |
+| 22 | TCP | SSH 連線（同步、傳輸、終端機）|
 
-### 前端 (TypeScript/Preact)
+```bash
+# Ubuntu (ufw)
+sudo ufw allow 4827/tcp
+sudo ufw allow 22/tcp
 
-| 套件 | 版本 | 用途 |
-|------|------|------|
-| `preact` | 10.x | UI 框架 |
-| `@tauri-apps/api` | 2.x | Tauri API |
-| `@tauri-apps/plugin-dialog` | 2.x | 檔案選擇 |
-| `vite` | 5.x | 建置工具 |
+# Fedora (firewalld)
+sudo firewall-cmd --permanent --add-port=4827/tcp
+sudo firewall-cmd --permanent --add-service=ssh
+sudo firewall-cmd --reload
+```
+
+> 若兩台電腦都在同一個區域網路且沒有防火牆限制，通常不需要額外設定。
+> 若使用 Tailscale，則 Tailscale 網路內部不受防火牆限制。
 
 ---
 
-## 目錄結構
+## 3. 兩台電腦配對教學
 
+以下假設：
+- **電腦 A**：已安裝 FlyMode
+- **電腦 B**：已安裝 FlyMode
+- 兩台都已安裝 SSH Server
+- 兩台在同一個 Tailscale 網路（或區域網路）
+
+### 步驟 1：取得對方 IP
+
+**方法 A — Tailscale 自動發現（建議）：**
+
+在電腦 A 的 FlyMode → 🔗 裝置頁面 → 點「Discover Tailscale Peers」按鈕。
+電腦 B 會自動出現在裝置列表中。
+
+**方法 B — 手動新增：**
+
+先在電腦 B 確認 IP 位址：
+
+```bash
+# Tailscale IP
+tailscale ip
+
+# 或區域網路 IP
+hostname -I
 ```
-flymode/
-├── Cargo.toml                    # Workspace 根配置
-├── README.md                     # 專案說明
-├── DOCUMENTATION.md              # 技術文件
-│
-├── src-tauri/                    # Rust 後端
-│   ├── Cargo.toml                # Rust 依賴配置
-│   ├── build.rs                  # 建置腳本
-│   ├── tauri.conf.json           # Tauri 配置
-│   ├── icons/                    # 應用圖示
-│   └── src/
-│       ├── main.rs               # 應用入口
-│       ├── config/               # 無線排程配置
-│       ├── notes/                # 便利貼模組
-│       │   └── mod.rs            # SQLite 存儲、Note 結構
-│       ├── p2p/                  # P2P 連接管理
-│       │   └── mod.rs            # SSH 客戶端、裝置管理
-│       ├── sync/                 # 資料同步引擎
-│       │   └── mod.rs            # 同步邏輯、衝突解決
-│       ├── transfer/             # 檔案傳輸
-│       │   └── mod.rs            # 上傳/下載管理
-│       ├── scheduler/            # 定時任務
-│       ├── wireless/             # 無線控制
-│       └── commands/             # Tauri IPC 命令
-│
-└── src-ui/                       # 前端
-    ├── package.json              # npm 配置
-    ├── tsconfig.json             # TypeScript 配置
-    ├── vite.config.ts            # Vite 配置
-    ├── index.html                # HTML 入口
-    └── src/
-        ├── main.tsx              # 應用入口
-        ├── App.tsx               # 主應用組件
-        ├── style.css             # 全域樣式
-        └── components/
-            ├── NotesTab.tsx      # 便利貼頁面
-            ├── P2PTab.tsx        # 裝置管理頁面
-            ├── SyncTab.tsx       # 同步頁面
-            ├── TransferTab.tsx   # 檔案傳輸頁面
-            ├── RulesTab.tsx      # 排程規則頁面
-            ├── QuickActionsTab.tsx # 快速操作頁面
-            └── SettingsTab.tsx   # 設定頁面
-```
+
+在電腦 A 的 FlyMode → 🔗 裝置頁面 → 點「Add Peer」，填入：
+- **Name**：自訂名稱（如「辦公室電腦」）
+- **IP Address**：電腦 B 的 IP
+- **SSH User**：電腦 B 的使用者名稱
+- **SSH Port**：22（預設）
+- **認證方式**：SSH 金鑰路徑 或 密碼
+
+### 步驟 2：配對
+
+在裝置列表中找到電腦 B → 點「Pair」按鈕。
+
+此時電腦 B 的 FlyMode 會收到配對請求。在電腦 B 的 🔗 裝置頁面 → 「Incoming Pair Requests」區塊 → 點「Accept」。
+
+配對完成後，兩台電腦互相出現在裝置列表中。
+
+### 步驟 3：設定 SSH 認證（必要）
+
+配對只交換了裝置資訊（IP、名稱），**不會自動設定 SSH 連線帳密**。你必須手動設定：
+
+1. 在裝置列表中，點對方裝置的「Edit」按鈕
+2. 填入 **SSH User**（對方電腦的使用者名稱）
+3. 填入認證方式（二擇一）：
+   - **SSH Key Path**：如 `~/.ssh/id_ed25519`（建議，需先做 `ssh-copy-id`）
+   - **SSH Password**：對方電腦的登入密碼
+4. 儲存
+
+> **重要：** 兩台電腦都需要各自設定對方的 SSH 帳密。如果未設定，同步、檔案傳輸、終端機等功能都會因 SSH 連線失敗而無法使用。
+
+設定完成後，裝置狀態應顯示為 **Online**（綠色圓點）。若仍為 Offline，請參考[疑難排解](#8-疑難排解)。
+
+### 步驟 4：建立信任
+
+在裝置列表中，點對方裝置的「Trust」按鈕。標記為信任後：
+- 自動同步筆記到該裝置
+- 可以傳輸檔案
+- 可以開啟遠端終端機
+
+> **兩台電腦都需要互相 Trust 對方，才能雙向同步。**
+
+### 步驟 5：驗證連線
+
+- 🔄 同步頁面：點「Sync Now」手動同步，確認筆記同步成功
+- 📤 傳輸頁面：嘗試上傳一個小檔案到對方
+- 狀態列應顯示對方為 Online（綠色圓點）
 
 ---
 
-## 核心模組設計
+## 4. 功能說明
 
-### 1. Notes Store (`src-tauri/src/notes/mod.rs`)
+### 4.1 便利貼筆記 📝
 
-#### 資料結構
+#### 基本操作
 
-```rust
-pub struct Note {
-    pub id: String,              // UUID
-    pub title: String,           // 標題
-    pub content: String,         // 內容
-    pub color: NoteColor,        // 顏色
-    pub category: NoteCategory,  // 類別
-    pub pinned: bool,            // 是否釘選
-    pub archived: bool,          // 是否封存
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub tags: Vec<String>,       // 標籤
-    pub position_x: i32,         // X 座標（預留）
-    pub position_y: i32,         // Y 座標（預留）
-    pub width: i32,              // 寬度
-    pub height: i32,             // 高度
-    pub device_id: String,       // 建立裝置 ID
-    pub sync_hash: Option<String>,// 同步雜湊
-    pub deleted: bool,           // 軟刪除標記
-}
+| 操作 | 說明 |
+|------|------|
+| 建立筆記 | 點「+ New Note」，輸入標題和內容 |
+| 編輯筆記 | 點筆記卡片上的「Edit」按鈕 |
+| 刪除筆記 | 點「Delete」按鈕（軟刪除，可透過同步恢復）|
+| 釘選筆記 | 點「Pin」按鈕，釘選的筆記會顯示在最上方 |
+| 搜尋 | 在搜尋欄輸入關鍵字，搜尋標題和內容 |
 
-pub enum NoteColor {
-    Yellow, Pink, Blue, Green,
-    Purple, Orange, White, Gray,
-}
+#### 顏色
 
-pub enum NoteCategory {
-    General, Work, Personal, Ideas,
-    Tasks, Important, Archive,
-}
-```
+| 顏色 | 色碼 | 建議用途 |
+|------|------|----------|
+| 黃色 Yellow | `#fef08a` | 一般筆記 |
+| 粉色 Pink | `#fbcfe8` | 個人/心情 |
+| 藍色 Blue | `#bfdbfe` | 工作/專案 |
+| 綠色 Green | `#bbf7d0` | 已完成事項 |
+| 紫色 Purple | `#e9d5ff` | 創意點子 |
+| 橙色 Orange | `#fed7aa` | 待辦事項 |
+| 白色 White | `#ffffff` | 簡潔筆記 |
+| 灰色 Gray | `#e5e7eb` | 封存/參考 |
 
-#### SQLite Schema
-
-```sql
-CREATE TABLE notes (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    content TEXT NOT NULL,
-    color TEXT NOT NULL,
-    category TEXT NOT NULL,
-    pinned INTEGER NOT NULL DEFAULT 0,
-    archived INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    tags TEXT NOT NULL DEFAULT '[]',
-    position_x INTEGER NOT NULL DEFAULT 0,
-    position_y INTEGER NOT NULL DEFAULT 0,
-    width INTEGER NOT NULL DEFAULT 280,
-    height INTEGER NOT NULL DEFAULT 200,
-    device_id TEXT NOT NULL,
-    sync_hash TEXT,
-    deleted INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE INDEX idx_notes_updated ON notes(updated_at);
-CREATE INDEX idx_notes_category ON notes(category);
-CREATE INDEX idx_notes_deleted ON notes(deleted);
-```
-
-### 2. P2P Manager (`src-tauri/src/p2p/mod.rs`)
-
-#### 資料結構
-
-```rust
-pub struct PeerDevice {
-    pub id: String,
-    pub name: String,
-    pub hostname: String,
-    pub ip_address: String,
-    pub port: u16,
-    pub connection_type: ConnectionType,
-    pub status: DeviceStatus,
-    pub last_seen: Option<DateTime<Utc>>,
-    pub ssh_user: String,
-    pub ssh_key_path: Option<String>,
-    pub ssh_password: Option<String>,
-    pub is_trusted: bool,
-    pub tailscale_hostname: Option<String>,
-    pub flymode_version: Option<String>,
-}
-
-pub enum ConnectionType {
-    Tailscale,    // Tailscale VPN
-    LanDirect,    // 區域網路直連
-    WanDirect,    // 廣域網路直連
-}
-```
-
-#### Tailscale 發現
-
-```rust
-// 執行 tailscale status --json 解析
-let output = Command::new("tailscale")
-    .args(["status", "--json"])
-    .output()
-    .await;
-
-// 解析 JSON 取得 Peer 列表
-let status: TailscaleStatus = serde_json::from_str(&json_str)?;
-```
-
-### 3. SSH Client
-
-```rust
-pub struct SSHClient {
-    session: Option<Session>,
-}
-
-impl SSHClient {
-    // 連線
-    pub fn connect(&mut self, peer: &PeerDevice) -> Result<()>;
-    
-    // 執行命令
-    pub fn execute_command(&mut self, command: &str) -> Result<String>;
-    
-    // 上傳檔案 (SFTP)
-    pub fn upload_file(&mut self, local: &PathBuf, remote: &str) -> Result<()>;
-    
-    // 下載檔案 (SFTP)
-    pub fn download_file(&mut self, remote: &str, local: &PathBuf) -> Result<()>;
-    
-    // 列出遠端檔案
-    pub fn list_remote_files(&mut self, dir: &str) -> Result<Vec<RemoteFileInfo>>;
-}
-```
-
----
-
-## P2P 同步架構
-
-### 同步流程
-
-```
-Device A                          Device B
-   │                                 │
-   │  1. SSH Connect                 │
-   │────────────────────────────────►│
-   │                                 │
-   │  2. Send Sync Payload           │
-   │    (local changes as JSON)      │
-   │────────────────────────────────►│
-   │                                 │
-   │  3. Receive Remote Payload      │
-   │◄────────────────────────────────│
-   │    (remote changes as JSON)     │
-   │                                 │
-   │  4. Apply Remote Changes        │
-   │    (merge to local SQLite)      │
-   │                                 │
-   │  5. Disconnect                  │
-   │◄────────────────────────────────►│
-   │                                 │
-```
-
-### Sync Payload
-
-```rust
-pub struct SyncPayload {
-    pub device_id: String,
-    pub device_name: String,
-    pub timestamp: DateTime<Utc>,
-    pub notes: Vec<Note>,
-    pub sync_folder_files: Vec<FileSyncInfo>,
-}
-```
-
-### 衝突解決
-
-使用 **Last-Write-Wins** 策略：
-- 比較 `updated_at` 時間戳
-- 較新的變更覆蓋較舊的
-- 使用 `sync_hash` 檢測實際變更
-
-```rust
-fn should_update(local: &Note, remote: &Note) -> bool {
-    // 如果 hash 相同，無需更新
-    if local.sync_hash == remote.sync_hash {
-        return false;
-    }
-    // 較新的更新時間優先
-    remote.updated_at > local.updated_at
-}
-```
-
----
-
-## 便利貼模組
-
-### 顏色配置
-
-| 顏色 | Hex | 用途建議 |
-|------|-----|----------|
-| Yellow | `#fef08a` | 一般筆記 |
-| Pink | `#fbcfe8` | 個人/心情 |
-| Blue | `#bfdbfe` | 工作/專案 |
-| Green | `#bbf7d0` | 完成事項 |
-| Purple | `#e9d5ff` | 創意點子 |
-| Orange | `#fed7aa` | 待辦事項 |
-| White | `#ffffff` | 簡潔筆記 |
-| Gray | `#e5e7eb` | 封存/參考 |
-
-### 分類系統
+#### 類別
 
 | 類別 | 說明 |
 |------|------|
@@ -423,182 +334,691 @@ fn should_update(local: &Note, remote: &Note) -> bool {
 | Important | 重要事項 |
 | Archive | 封存筆記 |
 
+#### 標籤
+
+在編輯筆記時可加入標籤（如 `#專案A`、`#待辦`）。標籤會顯示在筆記卡片上。
+
+#### 顯示模式
+
+點右上角的切換按鈕，可在**格狀（Grid）**和**列表（List）**模式間切換。
+
+#### 同步行為
+
+- 筆記每 5 秒自動載入最新狀態
+- 若已設定信任裝置且開啟自動同步，筆記會在背景同步到所有信任裝置
+- 刪除的筆記不會真正從資料庫移除（軟刪除），同步時會把刪除狀態傳播到其他裝置
+
 ---
 
-## 檔案傳輸
+### 4.2 裝置管理 🔗
 
-### 傳輸佇列
+#### 裝置資訊
 
-```rust
-pub struct TransferQueue {
-    pub transfers: Vec<TransferProgress>,
-    pub max_concurrent: usize,  // 預設 3
-}
+頁面頂部顯示本機資訊：
 
-pub struct TransferProgress {
-    pub transfer_id: String,
-    pub peer_id: String,
-    pub direction: TransferDirection,
-    pub local_path: String,
-    pub remote_path: String,
-    pub file_name: String,
-    pub total_bytes: u64,
-    pub transferred_bytes: u64,
-    pub status: TransferStatus,
-    pub started_at: Option<DateTime<Utc>>,
-    pub completed_at: Option<DateTime<Utc>>,
-    pub error_message: Option<String>,
-    pub speed_bps: Option<u64>,
-}
-```
+- **Device ID**：本機的唯一識別碼（UUID）
+- **Device Name**：本機的主機名稱
+- **Listen Port**：TCP 配對服務監聽的 port（預設 4827）
 
-### 傳輸狀態
+#### 新增裝置
+
+| 欄位 | 說明 | 範例 |
+|------|------|------|
+| Name | 自訂名稱 | 辦公室電腦 |
+| Hostname | 對方主機名稱 | my-desktop |
+| IP Address | 對方 IP | 100.64.0.2 |
+| SSH Port | SSH 端口 | 22 |
+| SSH User | SSH 使用者 | alice |
+| Connection Type | 連線類型 | Tailscale / LAN Direct / WAN Direct |
+| SSH Key Path | 金鑰路徑（選填）| ~/.ssh/id_ed25519 |
+| SSH Password | 密碼（選填）| 若不使用金鑰認證 |
+
+#### 連線類型標示
+
+| 標示 | 類型 | 說明 |
+|------|------|------|
+| 🦎 | Tailscale | 透過 Tailscale VPN 連線 |
+| 🏠 | LAN Direct | 區域網路直連 |
+| 🌐 | WAN Direct | 廣域網路直連 |
+
+#### 裝置狀態
 
 | 狀態 | 說明 |
 |------|------|
-| Pending | 等待中 |
+| 🟢 Online | 連線正常（SSH 可達）|
+| 🔴 Offline | 無法連線 |
+| ⚪ Unknown | 尚未檢查 |
+
+狀態每 30 秒自動更新一次。
+
+#### Tailscale 自動發現
+
+點「Discover Tailscale Peers」按鈕，FlyMode 會執行 `tailscale status --json` 取得同一 Tailscale 網路中所有裝置的資訊，自動加入裝置列表。
+
+#### TCP 配對協議
+
+FlyMode 內建 TCP 配對服務（port 4827）：
+
+1. **電腦 A** 點「Pair」→ 發送配對請求到電腦 B
+2. **電腦 B** 收到請求 → 在「Incoming Pair Requests」區塊顯示
+3. **電腦 B** 點「Accept」→ 雙方互加對方到裝置列表
+4. 配對完成後，雙方自動連線並標記為已連接
+
+#### 信任機制
+
+- **未信任裝置**：只能看到在線狀態，無法同步或傳輸
+- **已信任裝置**：可自動同步筆記、傳輸檔案、開啟遠端終端機
+- 點裝置卡片上的「Trust / Untrust」按鈕切換
+
+#### OpenClaw 偵測
+
+若遠端裝置上有 OpenClaw 程式正在執行，裝置卡片上會顯示「>_」終端機按鈕。偵測每 120 秒自動執行一次。
+
+---
+
+### 4.3 資料同步 🔄
+
+#### 同步策略
+
+FlyMode 使用 **Last-Write-Wins (LWW)** 衝突解決策略：
+
+- 兩台裝置同時修改同一筆記時，以 `updated_at` 時間戳較新的為準
+- 使用 `sync_hash`（SHA-256）偵測實際變更，避免不必要的覆蓋
+- 只存在一端的筆記會直接同步到另一端
+- 刪除狀態也會同步（軟刪除）
+
+#### 自動同步
+
+| 設定 | 說明 |
+|------|------|
+| 開啟/關閉 | 🔄 同步頁面上的 Auto-Sync 開關 |
+| 同步間隔 | 可選 1 分鐘、5 分鐘、15 分鐘、30 分鐘、1 小時 |
+| 同步對象 | 所有已信任且在線的裝置 |
+
+#### 手動操作
+
+| 操作 | 說明 |
+|------|------|
+| Sync Now | 立即同步所有信任裝置 |
+| Sync with Peer | 只同步指定裝置 |
+
+#### 同步紀錄
+
+頁面下方顯示最近 10 次同步結果：
+
+- 對方裝置名稱
+- 同步狀態（成功/失敗）
+- 同步筆記數量
+- 花費時間
+- 錯誤訊息（若有）
+
+#### 匯出 / 匯入
+
+| 操作 | 說明 |
+|------|------|
+| Export Notes | 匯出所有筆記為 JSON 檔案 |
+| Import Notes | 從 JSON 檔案匯入筆記 |
+
+可用於備份還原，或在不方便 SSH 連線時手動交換筆記。
+
+---
+
+### 4.4 檔案傳輸 📤
+
+#### 上傳檔案
+
+1. 選擇目標裝置（必須已信任、在線）
+2. 點「Upload」按鈕 → 系統檔案選擇器
+3. 選擇要上傳的檔案
+4. 輸入遠端目標路徑（預設為對方家目錄）
+5. 傳輸開始，顯示進度條
+
+#### 下載檔案
+
+1. 選擇來源裝置
+2. 瀏覽遠端檔案系統（可點目錄進入）
+3. 點目標檔案的「Download」按鈕
+4. 選擇本地存放路徑
+5. 傳輸開始，顯示進度條
+
+#### 遠端檔案瀏覽器
+
+- 顯示檔案名稱、大小、最後修改時間
+- 目錄可點擊進入
+- 支援 `..` 回到上層目錄
+
+#### 傳輸管理
+
+| 功能 | 說明 |
+|------|------|
+| 進度條 | 即時顯示百分比和傳輸速度 |
+| 取消 | 可取消進行中的傳輸 |
+| 清除完成 | 清除已完成的傳輸紀錄 |
+| 並行限制 | 最多同時 3 筆傳輸 |
+
+#### 傳輸狀態
+
+| 狀態 | 說明 |
+|------|------|
+| Pending | 排隊等待中 |
 | InProgress | 傳輸中 |
 | Completed | 已完成 |
-| Failed | 失敗 |
+| Failed | 失敗（顯示錯誤訊息）|
 | Cancelled | 已取消 |
 
 ---
 
-## API 參考
+### 4.5 遠端終端機
 
-### Notes API
+#### 功能
 
-| 命令 | 參數 | 返回值 |
-|------|------|--------|
-| `create_note` | title, content | Note |
-| `update_note` | note | - |
-| `delete_note` | id | - |
-| `get_note` | id | Option<Note> |
-| `list_notes` | include_archived | Vec<Note> |
-| `search_notes` | query | Vec<Note> |
+在 FlyMode 內直接開啟遠端裝置上的 OpenClaw TUI 介面。
 
-### P2P API
+#### 使用條件
 
-| 命令 | 參數 | 返回值 |
-|------|------|--------|
-| `get_p2p_config` | - | P2PConfig |
-| `save_p2p_config` | config | - |
-| `add_peer` | peer | - |
-| `remove_peer` | peer_id | - |
-| `update_peer` | peer | - |
-| `check_peer_status` | peer | DeviceStatus |
-| `discover_tailscale` | - | Vec<PeerDevice> |
+- 遠端裝置已信任且在線
+- 遠端裝置正在執行 OpenClaw 程式
+- 裝置卡片上會自動顯示「>_」按鈕
 
-### Sync API
+#### 操作
 
-| 命令 | 參數 | 返回值 |
-|------|------|--------|
-| `get_sync_state` | - | SyncState |
-| `sync_with_peer` | peer | SyncResult |
-| `sync_all_peers` | - | Vec<SyncResult> |
-| `export_notes` | - | String (JSON) |
-| `import_notes` | json | usize |
+1. 在 🔗 裝置頁面找到有「>_」按鈕的裝置
+2. 點「>_」按鈕 → 開啟終端機視窗
+3. 自動連線到遠端 SSH，啟動 OpenClaw TUI
+4. 像一般終端機一樣操作
+5. 點「x」或點擊視窗外部關閉
 
-### Transfer API
+#### 終端機功能
 
-| 命令 | 參數 | 返回值 |
-|------|------|--------|
-| `get_transfer_queue` | - | TransferQueue |
-| `upload_file` | peer, local_path, remote_path | transfer_id |
-| `download_file` | peer, remote_path, local_path | transfer_id |
-| `cancel_transfer` | transfer_id | - |
-| `browse_remote_files` | peer, path | Vec<RemoteFileInfo> |
+| 功能 | 說明 |
+|------|------|
+| 中文輸入 | 支援 fcitx5/iBus 等中文輸入法 |
+| 剪貼簿複製 | 選取文字即自動複製 |
+| 剪貼簿貼上 | `Ctrl+Shift+V` 貼上 |
+| 自動縮放 | 視窗大小改變時自動調整終端機尺寸 |
+| 游標 | 閃爍方塊游標 |
+| 256 色 | 支援 xterm-256color |
+
+#### 技術細節
+
+- 使用 xterm.js v6.1 (beta) + WebGL 渲染器
+- SSH PTY 連線，支援動態視窗大小調整
+- UTF-8 編碼（自動設定 `LANG=en_US.UTF-8`）
+- 中文 IME 使用 50ms 去重機制避免重複字元
 
 ---
 
-## 建置與部署
+### 4.6 無線排程 ⏰
 
-### 環境需求
+#### 建立規則
 
-| 工具 | 版本 | 說明 |
+| 欄位 | 說明 |
+|------|------|
+| Name | 規則名稱 |
+| Target | WiFi / Bluetooth / Airplane Mode / Custom Command |
+| Action | Enable / Disable / Toggle / Run Command |
+| Start Time | 開始時間（HH:MM 格式）|
+| End Time | 結束時間（選填，HH:MM 格式）|
+| Days | 勾選要執行的星期（一到日）|
+| Command | 自定義命令（僅 Custom Command 目標時填寫）|
+
+#### 規則行為
+
+- **單一時間點**：只設 Start Time → 在該時間執行一次
+- **時間範圍**：設 Start + End Time → 開始時執行 Action，結束時執行反向動作
+- **跨日範圍**：如 22:00 - 06:00，會在晚上 10 點到隔天早上 6 點期間生效
+- **執行間隔**：預設每 60 秒檢查一次（可在設定頁面調整）
+
+#### 管理
+
+| 操作 | 說明 |
+|------|------|
+| Toggle | 啟用/停用規則（不需刪除）|
+| Execute Now | 立即手動執行一次 |
+| Edit | 修改規則設定 |
+| Delete | 刪除規則 |
+
+---
+
+### 4.7 快速操作 ⚡
+
+#### 無線控制
+
+三個即時切換按鈕：
+
+| 按鈕 | 功能 |
+|------|------|
+| WiFi | 開啟/關閉 WiFi |
+| Bluetooth | 開啟/關閉藍牙 |
+| Airplane Mode | 開啟/關閉飛航模式 |
+
+#### 自定義命令
+
+在文字欄位輸入任意 shell 命令，點「Run」執行。執行結果會顯示在下方。
+
+> **注意：** 命令以當前使用者權限執行。需要 root 權限的命令需加 `sudo`（需免密碼 sudo 設定）。
+
+---
+
+### 4.8 設定 ⚙️
+
+| 設定項目 | 說明 | 預設值 |
+|----------|------|--------|
+| Show Notifications | 顯示系統通知 | 開啟 |
+| Minimize to Tray | 關閉視窗時最小化到系統匣 | 關閉 |
+| Launch at Startup | 開機自動啟動 | 關閉 |
+| Require Password | 開啟時需輸入系統密碼 | 關閉 |
+| Check Interval | 排程規則檢查間隔（秒）| 60 |
+
+#### 系統密碼鎖定
+
+啟用「Require Password」後：
+- 每次開啟 FlyMode 需輸入**系統登入密碼**（非額外設定的密碼）
+- 從系統匣還原視窗時，若隱藏超過 1 秒，也需要重新輸入密碼
+- 使用 Linux PAM 機制驗證（`unix_chkpwd`）
+
+#### 系統匣
+
+啟用「Minimize to Tray」後：
+- 關閉視窗不會退出程式，而是最小化到系統匣
+- 點系統匣圖示可還原視窗
+- 右鍵系統匣圖示 → 可選「Show FlyMode」或「Quit」
+
+#### 版本資訊
+
+設定頁面底部顯示：
+- 應用版本號（如 v0.2.0）
+- Git commit hash
+
+---
+
+## 5. 系統架構
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       FlyMode v0.2.0                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│  ┌─────────────────── 前端 (Preact + TypeScript) ──────────┐ │
+│  │                                                           │ │
+│  │  📝 Notes  🔗 Devices  🔄 Sync  📤 Transfer             │ │
+│  │  ⏰ Schedule  ⚡ Quick  ⚙️ Settings  🔒 Lock  >_ Terminal │ │
+│  │                                                           │ │
+│  └────────────────────────┬──────────────────────────────────┘ │
+│                           │ Tauri IPC                          │
+│  ┌────────────────────────▼──────────────────────────────────┐ │
+│  │                後端 (Rust + Tauri 2 + Tokio)               │ │
+│  │                                                            │ │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐     │ │
+│  │  │  Notes   │ │   P2P    │ │   Sync   │ │ Transfer │     │ │
+│  │  │ (SQLite) │ │  (SSH2)  │ │ (Engine) │ │  (SFTP)  │     │ │
+│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘     │ │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐     │ │
+│  │  │Scheduler │ │ Wireless │ │ Terminal │ │  Config  │     │ │
+│  │  │ (Cron)   │ │ (nmcli)  │ │(SSH PTY) │ │  (JSON)  │     │ │
+│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘     │ │
+│  │                                                            │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                                                               │
+│  ┌──────────────────────────────────────────────────────────┐ │
+│  │          系統匣 + 開機啟動 + TCP 配對服務 (4827)          │ │
+│  └──────────────────────────────────────────────────────────┘ │
+│                                                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 模組說明
+
+| 模組 | 路徑 | 說明 |
 |------|------|------|
-| Rust | 1.70+ | 編譯後端 |
-| Node.js | 18+ | 前端建置 |
-| SQLite | 3.x | 資料庫（bundled） |
-
-### 安裝依賴
-
-```bash
-# Linux 系統依賴
-sudo apt install libgtk-3-dev libwebkit2gtk-4.0-dev \
-                 libappindicator3-dev librsvg2-dev patchelf \
-                 libssl-dev pkg-config
-
-# 前端依賴
-cd src-ui && npm install
-```
-
-### 開發模式
-
-```bash
-cargo tauri dev
-```
-
-### 生產建置
-
-```bash
-cargo tauri build
-```
+| `main.rs` | `src-tauri/src/` | 應用入口，初始化所有狀態，註冊 IPC 命令，啟動排程和自動同步 |
+| `commands/` | `src-tauri/src/` | 所有 Tauri IPC 命令處理器（30+ 命令）|
+| `notes/` | `src-tauri/src/` | 便利貼 CRUD、SQLite 操作、sync_hash 計算、全文搜尋 |
+| `p2p/` | `src-tauri/src/` | 裝置管理、SSH 客戶端、Tailscale 發現、TCP 配對服務 |
+| `sync/` | `src-tauri/src/` | 同步引擎、LWW 衝突解決、筆記合併 |
+| `transfer/` | `src-tauri/src/` | SFTP 檔案傳輸、佇列管理、進度追蹤、並行控制 |
+| `terminal/` | `src-tauri/src/` | SSH PTY 管理、OpenClaw 偵測、xterm.js 後端 |
+| `scheduler/` | `src-tauri/src/` | 排程規則評估、時間範圍計算、動作執行 |
+| `wireless/` | `src-tauri/src/` | 平台特定的 WiFi/藍牙/飛航模式控制 |
+| `config/` | `src-tauri/src/` | AppConfig 和 P2PConfig 的序列化（JSON）|
+| `crypto/` | `src-tauri/src/` | SSH 密碼加密/解密 |
 
 ---
 
-## 安全性考量
+## 6. 資料存儲
 
-### SSH 認證
+### 檔案位置
 
-1. **金鑰認證（推薦）**：使用 SSH 金鑰進行認證
-2. **密碼認證**：密碼僅存儲於本地配置檔案
+| 資料 | 路徑 | 格式 |
+|------|------|------|
+| 應用設定 | `~/.config/flymode/config.json` | JSON |
+| P2P 設定 | `~/.config/flymode/p2p.json` | JSON |
+| 便利貼資料庫 | `~/.local/share/flymode/notes.db` | SQLite |
+| 同步資料夾 | `~/.local/share/flymode/sync/` | 檔案 |
 
-### 資料存儲
-
-| 資料類型 | 存儲位置 | 加密 |
-|----------|----------|------|
-| 配置 | `~/.config/flymode/` | 否 |
-| 筆記 | `~/.local/share/flymode/notes.db` | 否 |
-| SSH 密碼 | `~/.config/flymode/p2p.json` | 否（未來可加密）|
-
-### 網路安全
-
-- 所有通訊透過 SSH 加密
-- 無需暴露端口（作為 SSH 客戶端）
-- 支援 Tailscale 私有網路
-
----
-
-## 設定檔案
-
-### 無線排程配置 (`~/.config/flymode/config.json`)
+### config.json 範例
 
 ```json
 {
-  "rules": [...],
+  "rules": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "睡前關 WiFi",
+      "enabled": true,
+      "action": "Disable",
+      "target": "Wifi",
+      "start_time": "23:00",
+      "end_time": "07:00",
+      "days": [0, 1, 2, 3, 4, 5, 6],
+      "command": null
+    }
+  ],
   "check_interval_seconds": 60,
   "show_notifications": true,
   "minimize_to_tray": true,
-  "auto_start": false
+  "auto_start": false,
+  "require_password": false
 }
 ```
 
-### P2P 配置 (`~/.config/flymode/p2p.json`)
+### p2p.json 範例
 
 ```json
 {
-  "device_id": "uuid-v4",
-  "device_name": "My Laptop",
+  "device_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "device_name": "my-laptop",
   "listen_port": 4827,
-  "peers": [...],
+  "peers": [
+    {
+      "id": "f9e8d7c6-b5a4-3210-fedc-ba0987654321",
+      "name": "Office PC",
+      "hostname": "my-desktop",
+      "ip_address": "100.64.0.2",
+      "port": 22,
+      "connection_type": "Tailscale",
+      "status": "Online",
+      "last_seen": "2026-02-28T10:30:00Z",
+      "ssh_user": "alice",
+      "ssh_key_path": "~/.ssh/id_ed25519",
+      "ssh_password": null,
+      "is_trusted": true,
+      "tailscale_hostname": "my-desktop",
+      "flymode_version": "0.2.0"
+    }
+  ],
   "auto_discover_tailscale": true,
   "sync_enabled": true,
   "sync_interval_seconds": 300
 }
 ```
 
+### SQLite 資料庫 Schema
+
+```sql
+CREATE TABLE notes (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    color TEXT NOT NULL,          -- Yellow/Pink/Blue/Green/Purple/Orange/White/Gray
+    category TEXT NOT NULL,       -- General/Work/Personal/Ideas/Tasks/Important/Archive
+    pinned INTEGER NOT NULL DEFAULT 0,
+    archived INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,     -- ISO 8601
+    updated_at TEXT NOT NULL,     -- ISO 8601
+    tags TEXT NOT NULL DEFAULT '[]',  -- JSON array
+    position_x INTEGER NOT NULL DEFAULT 0,
+    position_y INTEGER NOT NULL DEFAULT 0,
+    width INTEGER NOT NULL DEFAULT 280,
+    height INTEGER NOT NULL DEFAULT 200,
+    device_id TEXT NOT NULL,
+    sync_hash TEXT,               -- SHA-256
+    deleted INTEGER NOT NULL DEFAULT 0   -- 軟刪除
+);
+
+-- 索引
+CREATE INDEX idx_notes_updated ON notes(updated_at);
+CREATE INDEX idx_notes_category ON notes(category);
+CREATE INDEX idx_notes_deleted ON notes(deleted);
+```
+
 ---
 
-*文件最後更新：2026-02-27*
+## 7. 安全性
+
+### SSH 通訊
+
+所有裝置間的通訊（同步、檔案傳輸、終端機）都透過 SSH 加密通道。
+
+| 認證方式 | 優先順序 | 說明 |
+|----------|---------|------|
+| SSH 金鑰 | 1（建議）| 最安全，免密碼 |
+| SSH 密碼 | 2 | 密碼存在本地設定檔中 |
+
+### 密碼存儲
+
+- SSH 密碼使用 AES 加密存儲在 `p2p.json` 中，以 device_id 作為加密金鑰
+- 系統密碼鎖不存儲密碼，每次驗證都透過系統 PAM 機制
+
+### 網路安全
+
+- FlyMode 不開放任何對外服務端口（除了 TCP 4827 配對服務）
+- SSH 連線都是主動向外連線（作為客戶端）
+- 支援 Tailscale 私有網路（WireGuard 加密）
+
+### 建議
+
+1. **使用 SSH 金鑰認證**（而非密碼），更安全且方便
+2. **啟用 Tailscale**，避免在公開網路暴露 SSH port
+3. **啟用密碼鎖**（Settings → Require Password），防止他人使用
+4. 定期更新 FlyMode 和系統套件
+
+---
+
+## 8. 疑難排解
+
+### 安裝問題
+
+| 問題 | 解決方式 |
+|------|---------|
+| `gh auth login` 失敗 | 確認有 GitHub 帳號且有 repo 存取權限 |
+| `cargo tauri build` 失敗 | 確認已安裝所有系統依賴（libgtk, libwebkit 等）|
+| `npm install` 失敗 | 確認 Node.js >= 18（`node -v`）|
+| 找不到 `flymode` 命令 | 確認 `~/.local/bin` 在 PATH 中 |
+
+### P2P 連線問題
+
+| 問題 | 解決方式 |
+|------|---------|
+| 裝置顯示 Offline | 1. 確認對方 SSH Server 正在執行<br>2. 確認 IP 正確<br>3. 確認防火牆允許 port 22<br>4. `ssh user@ip` 手動測試 |
+| 配對請求收不到 | 1. 確認防火牆允許 port 4827<br>2. 確認對方 FlyMode 正在執行<br>3. 兩台在同一網路（或都在 Tailscale）|
+| Tailscale 發現不到裝置 | 1. `tailscale status` 確認兩台都在線<br>2. 確認登入同一個 Tailscale 帳號 |
+| SSH 連線失敗 | 1. 確認使用者名稱正確<br>2. 確認金鑰路徑正確或密碼正確<br>3. `ssh -v user@ip` 看詳細錯誤 |
+
+### 同步問題
+
+| 問題 | 解決方式 |
+|------|---------|
+| 同步後筆記沒更新 | 確認兩端都已 Trust 對方 |
+| 同步失敗 | 查看同步紀錄的錯誤訊息，通常是 SSH 連線問題 |
+| 衝突覆蓋了我的修改 | LWW 策略以時間戳為準。避免同時在兩台修改同一筆記 |
+
+### 終端機問題
+
+| 問題 | 解決方式 |
+|------|---------|
+| 看不到「>_」按鈕 | 確認遠端裝置正在執行 OpenClaw 程式 |
+| 終端機連線失敗 | 確認 SSH 連線正常（先測試同步是否正常）|
+| 中文輸入重複 | 升級到最新版 FlyMode（已修復）|
+| 游標看不到 | 升級到最新版 FlyMode（已修復，使用 WebGL 渲染器）|
+
+### 無線控制問題
+
+| 問題 | 解決方式 |
+|------|---------|
+| WiFi 切換無效 | Linux: 確認 `nmcli` 可用（`which nmcli`）|
+| 藍牙切換無效 | Linux: 確認 `rfkill` 可用（`which rfkill`）|
+| 飛航模式無效 | Linux: 確認 `rfkill` 可用 |
+
+---
+
+## 9. 技術參考
+
+### 後端依賴
+
+| 套件 | 版本 | 用途 |
+|------|------|------|
+| `tauri` | 2.x | 桌面應用框架 |
+| `tokio` | 1.x | 非同步運行時 |
+| `rusqlite` | 0.31 | SQLite 資料庫（bundled）|
+| `ssh2` | 0.9 | SSH / SFTP 通訊 |
+| `serde` / `serde_json` | 1.x | JSON 序列化 |
+| `chrono` | 0.4 | 時間處理 |
+| `sha2` | 0.10 | sync_hash 計算 |
+| `crossbeam-channel` | 0.5 | 終端機 I/O 通道 |
+| `thiserror` | 1.x | 錯誤型別定義 |
+| `tracing` | 0.1 | 日誌輸出 |
+| `uuid` | 1.x | UUID 產生 |
+| `tauri-plugin-autostart` | 2.x | 開機自動啟動 |
+| `tauri-plugin-dialog` | 2.x | 檔案對話框 |
+| `tauri-plugin-notification` | 2.x | 系統通知 |
+
+### 前端依賴
+
+| 套件 | 版本 | 用途 |
+|------|------|------|
+| `preact` | 10.x | UI 框架 |
+| `@tauri-apps/api` | 2.x | Tauri IPC |
+| `@xterm/xterm` | 6.1.0-beta | 終端機模擬器 |
+| `@xterm/addon-fit` | 0.11 | 終端機自動縮放 |
+| `@xterm/addon-webgl` | 0.19 | WebGL 渲染器 |
+| `vite` | 5.x | 建置工具 |
+| `typescript` | 5.x | 型別檢查 |
+
+### IPC 命令一覽
+
+#### 設定
+
+| 命令 | 功能 |
+|------|------|
+| `get_config` | 載入應用設定 |
+| `save_config` | 儲存應用設定 |
+| `get_build_info` | 取得版本號和 git hash |
+
+#### 無線控制
+
+| 命令 | 功能 |
+|------|------|
+| `get_status` | 取得 WiFi/藍牙/飛航模式狀態 |
+| `toggle_wifi` | 開關 WiFi |
+| `toggle_bluetooth` | 開關藍牙 |
+| `toggle_airplane_mode` | 開關飛航模式 |
+| `run_custom_command` | 執行自定義命令 |
+
+#### 排程
+
+| 命令 | 功能 |
+|------|------|
+| `add_rule` | 新增排程規則 |
+| `update_rule` | 修改規則 |
+| `delete_rule` | 刪除規則 |
+| `toggle_rule` | 啟用/停用規則 |
+| `execute_rule_now` | 立即執行規則 |
+
+#### 便利貼
+
+| 命令 | 功能 |
+|------|------|
+| `create_note` | 建立筆記 |
+| `update_note` | 修改筆記 |
+| `delete_note` | 刪除筆記 |
+| `get_note` | 取得單一筆記 |
+| `list_notes` | 列出所有筆記 |
+| `search_notes` | 搜尋筆記 |
+| `get_note_colors` | 取得可用顏色 |
+| `get_note_categories` | 取得可用類別 |
+
+#### 裝置管理
+
+| 命令 | 功能 |
+|------|------|
+| `get_p2p_config` | 載入 P2P 設定 |
+| `save_p2p_config` | 儲存 P2P 設定 |
+| `add_peer` | 新增裝置 |
+| `remove_peer` | 移除裝置 |
+| `update_peer` | 修改裝置 |
+| `check_peer_status` | 檢查單一裝置狀態 |
+| `check_all_peers` | 檢查所有裝置狀態 |
+| `discover_tailscale` | Tailscale 自動發現 |
+| `get_device_id` | 取得本機 ID |
+| `get_device_name` | 取得本機名稱 |
+
+#### 配對
+
+| 命令 | 功能 |
+|------|------|
+| `pair_with_peer` | 發送配對請求 |
+| `get_pending_pair_requests` | 取得待處理的配對請求 |
+| `accept_pair_request` | 接受配對 |
+| `reject_pair_request` | 拒絕配對 |
+
+#### 同步
+
+| 命令 | 功能 |
+|------|------|
+| `get_sync_state` | 取得同步狀態 |
+| `sync_with_peer` | 與指定裝置同步 |
+| `sync_all_peers` | 與所有信任裝置同步 |
+| `export_notes` | 匯出筆記為 JSON |
+| `import_notes` | 從 JSON 匯入筆記 |
+| `get_sync_folder` | 取得同步資料夾路徑 |
+
+#### 檔案傳輸
+
+| 命令 | 功能 |
+|------|------|
+| `get_transfer_queue` | 取得傳輸佇列 |
+| `upload_file` | 上傳檔案 |
+| `download_file` | 下載檔案 |
+| `cancel_transfer` | 取消傳輸 |
+| `clear_completed_transfers` | 清除已完成傳輸 |
+| `get_transfer_progress` | 取得單一傳輸進度 |
+| `browse_remote_files` | 瀏覽遠端檔案 |
+
+#### 終端機
+
+| 命令 | 功能 |
+|------|------|
+| `check_openclaw_status` | 偵測遠端 OpenClaw 狀態 |
+| `open_terminal` | 開啟 SSH PTY 連線 |
+| `send_terminal_input` | 傳送按鍵到終端機 |
+| `resize_terminal` | 調整終端機大小 |
+| `close_terminal` | 關閉終端機 |
+
+#### 認證
+
+| 命令 | 功能 |
+|------|------|
+| `verify_system_password` | 驗證系統密碼 |
+
+### 平台特定實作
+
+#### 無線控制
+
+| 平台 | WiFi | 藍牙 | 飛航模式 |
+|------|------|------|----------|
+| Linux | `nmcli radio wifi` | `rfkill block/unblock bluetooth` | `rfkill block/unblock all` |
+| Windows | PowerShell 網路介面卡 | `Get-Service bthserv` | 尚未實作 |
+| macOS | `networksetup -getairportpower` | `blueutil --power` | 尚未實作 |
+
+#### 系統密碼驗證
+
+| 平台 | 方式 |
+|------|------|
+| Linux | `/usr/sbin/unix_chkpwd`（PAM helper, setuid root）|
+| Windows | 尚未實作（計畫使用 WinAPI `LogonUserA`）|
+| macOS | 尚未實作 |
+
+---
+
+*文件最後更新：2026-02-28*
 *版本：v0.2.0*
