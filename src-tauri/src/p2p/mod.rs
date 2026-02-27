@@ -212,7 +212,13 @@ impl P2PManager {
         self.config.read().await.clone()
     }
 
-    pub async fn save_config(&self, config: P2PConfig) -> Result<(), P2PError> {
+    pub async fn save_config(&self, mut config: P2PConfig) -> Result<(), P2PError> {
+        // config_path is #[serde(skip)], so it's empty when coming from frontend.
+        // Copy it from the current in-memory config before saving to disk.
+        {
+            let current = self.config.read().await;
+            config.config_path = current.config_path.clone();
+        }
         config.save()?;
         let mut current = self.config.write().await;
         *current = config;

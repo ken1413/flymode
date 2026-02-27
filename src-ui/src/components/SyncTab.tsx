@@ -68,8 +68,12 @@ export function SyncTab() {
   const updateSyncInterval = async (seconds: number) => {
     if (!p2pConfig) return;
     const updated = { ...p2pConfig, sync_interval_seconds: seconds };
-    await invoke('save_p2p_config', { config: updated });
-    setP2pConfig(updated);
+    try {
+      await invoke('save_p2p_config', { config: updated });
+      setP2pConfig(updated);
+    } catch (e) {
+      toast.error('Failed to save sync interval: ' + e);
+    }
   };
 
   const handleExport = async () => {
