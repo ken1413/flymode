@@ -55,14 +55,14 @@ install_system_deps() {
                 sudo apt-get install -y -qq \
                     build-essential curl wget git pkg-config \
                     libgtk-3-dev libwebkit2gtk-4.1-dev \
-                    libappindicator3-dev librsvg2-dev patchelf \
+                    libayatana-appindicator3-dev librsvg2-dev patchelf \
                     libssl-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
                     || {
                         warn "Batch install failed, trying packages individually..."
                         local pkgs=(
                             build-essential curl wget git pkg-config
                             libgtk-3-dev libwebkit2gtk-4.1-dev
-                            libappindicator3-dev librsvg2-dev patchelf
+                            libayatana-appindicator3-dev librsvg2-dev patchelf
                             libssl-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
                         )
                         for pkg in "${pkgs[@]}"; do

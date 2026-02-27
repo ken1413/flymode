@@ -60,7 +60,7 @@ flymode
 
 ```bash
 sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev \
-    libappindicator3-dev librsvg2-dev patchelf \
+    libayatana-appindicator3-dev librsvg2-dev patchelf \
     libssl-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
 ```
 
