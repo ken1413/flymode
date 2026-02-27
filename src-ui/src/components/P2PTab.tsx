@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { PeerDevice, P2PConfig, DeviceStatus, ConnectionType, PairRequest } from '../App';
 import { toast } from './Toast';
+import { TerminalModal } from './TerminalModal';
 
 interface PeerFormData {
   name: string;
@@ -24,6 +25,8 @@ export function P2PTab() {
   const [peerStatuses, setPeerStatuses] = useState<Map<string, DeviceStatus>>(new Map());
   const [pairRequests, setPairRequests] = useState<PairRequest[]>([]);
   const [pairingIp, setPairingIp] = useState<string | null>(null);
+  const [openclawPeers, setOpenclawPeers] = useState<Set<string>>(new Set());
+  const [terminalPeer, setTerminalPeer] = useState<PeerDevice | null>(null);
   const [form, setForm] = useState<PeerFormData>({
     name: '',
     hostname: '',
@@ -44,16 +47,38 @@ export function P2PTab() {
     }
   }, []);
 
+  const checkOpenclawStatus = useCallback(async (peers: PeerDevice[], statusMap: Map<string, DeviceStatus>) => {
+    const results = new Set<string>();
+    for (const peer of peers) {
+      if (peer.is_trusted && statusMap.get(peer.id) === 'Online') {
+        try {
+          const running = await invoke<boolean>('check_openclaw_status', { peer });
+          if (running) {
+            results.add(peer.id);
+          }
+        } catch {
+          // Silently skip — peer may not be reachable for SSH
+        }
+      }
+    }
+    setOpenclawPeers(results);
+  }, []);
+
   const checkStatuses = useCallback(async () => {
     try {
       const statuses = await invoke<[string, DeviceStatus][]>('check_all_peers');
       const map = new Map<string, DeviceStatus>();
       statuses.forEach(([id, status]) => map.set(id, status));
       setPeerStatuses(map);
+
+      // Check OpenClaw status for online+trusted peers
+      if (config) {
+        checkOpenclawStatus(config.peers, map);
+      }
     } catch (e) {
       toast.error('Failed to check peer statuses');
     }
-  }, []);
+  }, [config, checkOpenclawStatus]);
 
   const loadPairRequests = useCallback(async () => {
     try {
@@ -371,6 +396,15 @@ export function P2PTab() {
                 </div>
               </div>
               <div class="peer-actions">
+                {openclawPeers.has(peer.id) && (
+                  <button
+                    class="btn-terminal"
+                    onClick={() => setTerminalPeer(peer)}
+                    title="Open OpenClaw Terminal"
+                  >
+                    {'>_'}
+                  </button>
+                )}
                 <button
                   class={`btn btn-sm ${peer.is_trusted ? 'btn-primary' : 'btn-icon'}`}
                   onClick={() => toggleTrust(peer)}
@@ -411,6 +445,13 @@ export function P2PTab() {
             </div>
           ))}
         </div>
+      )}
+
+      {terminalPeer && (
+        <TerminalModal
+          peer={terminalPeer}
+          onClose={() => setTerminalPeer(null)}
+        />
       )}
 
       {showModal && (

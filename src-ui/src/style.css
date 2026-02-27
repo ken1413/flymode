@@ -978,3 +978,69 @@ input[type="checkbox"] {
   font-size: 13px;
   margin-top: 8px;
 }
+
+/* ── Terminal Modal ────────────────────────────────────────── */
+
+.terminal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.terminal-modal {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 90vw;
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.terminal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.terminal-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.terminal-container {
+  flex: 1;
+  padding: 4px;
+  overflow: hidden;
+}
+
+.terminal-container .xterm {
+  height: 100%;
+}
+
+.btn-terminal {
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: monospace;
+  background: var(--bg);
+  border: 1px solid var(--success);
+  color: var(--success);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-terminal:hover {
+  background: var(--success);
+  color: var(--bg);
+}

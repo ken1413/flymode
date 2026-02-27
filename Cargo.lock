@@ -1305,6 +1305,7 @@ dependencies = [
  "core-foundation 0.9.4",
  "criterion",
  "cron",
+ "crossbeam-channel",
  "dirs 5.0.1",
  "futures",
  "hostname",

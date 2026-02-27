@@ -5,16 +5,18 @@ mod notes;
 mod p2p;
 mod scheduler;
 mod sync;
+mod terminal;
 mod transfer;
 mod wireless;
 
-use commands::{ConfigState, NotesState, P2PState, PairState, SyncStateType, TransferState, *};
+use commands::{ConfigState, NotesState, P2PState, PairState, SyncStateType, TerminalState, TransferState, *};
 use config::AppConfig;
 use notes::NotesStore;
 use p2p::pair::PairServer;
 use p2p::P2PManager;
 use scheduler::Scheduler;
 use sync::SyncEngine;
+use terminal::TerminalManager;
 use transfer::TransferManager;
 use std::sync::Arc;
 use tauri::Manager;
@@ -56,6 +58,9 @@ fn main() {
     let transfer_manager = TransferManager::new();
     let transfer_state: TransferState = Arc::new(transfer_manager);
 
+    let terminal_manager = TerminalManager::new();
+    let terminal_state: TerminalState = Arc::new(terminal_manager);
+
     // PairServer shares the same P2PConfig Arc as P2PManager
     let p2p_config_arc = p2p_state.config.clone();
 
@@ -69,6 +74,7 @@ fn main() {
         .manage(p2p_state)
         .manage(sync_state)
         .manage(transfer_state)
+        .manage(terminal_state)
         .manage(Arc::new(RwLock::new(scheduler)))
         .setup(move |app| {
             // Create and manage PairServer
@@ -215,6 +221,11 @@ fn main() {
             verify_system_password,
             get_device_id,
             get_device_name,
+            check_openclaw_status,
+            open_terminal,
+            send_terminal_input,
+            resize_terminal,
+            close_terminal,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

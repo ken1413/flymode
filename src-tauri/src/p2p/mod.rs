@@ -414,7 +414,7 @@ impl P2PManager {
 }
 
 pub struct SSHClient {
-    session: Option<Session>,
+    pub(crate) session: Option<Session>,
 }
 
 impl SSHClient {

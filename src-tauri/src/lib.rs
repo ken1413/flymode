@@ -5,6 +5,7 @@ pub mod notes;
 pub mod p2p;
 pub mod scheduler;
 pub mod sync;
+pub mod terminal;
 pub mod transfer;
 pub mod wireless;
 

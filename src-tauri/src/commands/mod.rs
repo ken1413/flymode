@@ -4,10 +4,12 @@ use crate::p2p::pair::{PairRequest, PairServer};
 use crate::p2p::{DeviceStatus, P2PConfig, P2PManager, PeerDevice};
 use crate::scheduler::{execute_custom_command, execute_command, get_airplane_command, get_bluetooth_command, get_wifi_command};
 use crate::sync::{SyncEngine, SyncResult, SyncState};
+use crate::terminal::TerminalManager;
 use crate::transfer::{TransferManager, TransferProgress, TransferQueue};
 use crate::wireless::{get_wireless_status, WirelessStatus};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tauri::ipc::Channel;
 use tauri::State;
 use tokio::sync::RwLock;
 
@@ -17,6 +19,7 @@ pub type P2PState = Arc<P2PManager>;
 pub type PairState = Arc<PairServer>;
 pub type SyncStateType = Arc<SyncEngine>;
 pub type TransferState = Arc<TransferManager>;
+pub type TerminalState = Arc<TerminalManager>;
 
 #[tauri::command]
 pub async fn get_config(state: State<'_, ConfigState>) -> Result<AppConfig, String> {
@@ -378,6 +381,68 @@ pub fn verify_system_password(password: String) -> Result<bool, String> {
 
     let status = child.wait().map_err(|e| format!("unix_chkpwd wait failed: {}", e))?;
     Ok(status.success())
+}
+
+// Terminal commands
+#[tauri::command]
+pub async fn check_openclaw_status(peer: PeerDevice) -> Result<bool, String> {
+    let peer_clone = peer;
+    tokio::task::spawn_blocking(move || {
+        crate::terminal::check_openclaw_running(&peer_clone)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn open_terminal(
+    state: State<'_, TerminalState>,
+    peer: PeerDevice,
+    cols: u32,
+    rows: u32,
+    on_data: Channel<Vec<u8>>,
+) -> Result<String, String> {
+    state
+        .open_session(peer, cols, rows, on_data)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn send_terminal_input(
+    state: State<'_, TerminalState>,
+    session_id: String,
+    data: Vec<u8>,
+) -> Result<(), String> {
+    state
+        .send_input(&session_id, data)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn resize_terminal(
+    state: State<'_, TerminalState>,
+    session_id: String,
+    cols: u32,
+    rows: u32,
+) -> Result<(), String> {
+    state
+        .resize(&session_id, cols, rows)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn close_terminal(
+    state: State<'_, TerminalState>,
+    session_id: String,
+) -> Result<(), String> {
+    state
+        .close_session(&session_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // Utility commands
