@@ -1,0 +1,134 @@
+mod commands;
+mod config;
+mod crypto;
+mod notes;
+mod p2p;
+mod scheduler;
+mod sync;
+mod transfer;
+mod wireless;
+
+use commands::{ConfigState, NotesState, P2PState, SyncStateType, TransferState, *};
+use config::AppConfig;
+use notes::NotesStore;
+use p2p::P2PManager;
+use scheduler::Scheduler;
+use sync::SyncEngine;
+use transfer::TransferManager;
+use std::sync::Arc;
+use tauri::Manager;
+use tokio::sync::RwLock;
+use tracing::{error, info};
+
+fn main() {
+    tracing_subscriber::fmt::init();
+
+    let config = AppConfig::load().unwrap_or_else(|e| {
+        error!("Failed to load config: {}, using default", e);
+        AppConfig::default()
+    });
+
+    let p2p_config = p2p::P2PConfig::load().unwrap_or_else(|e| {
+        error!("Failed to load P2P config: {}, using default", e);
+        p2p::P2PConfig::default()
+    });
+
+    let device_id = p2p_config.device_id.clone();
+
+    let config_state: ConfigState = Arc::new(RwLock::new(config.clone()));
+    let scheduler = Scheduler::new(config_state.clone());
+
+    let notes_store = NotesStore::new(device_id.clone())
+        .expect("Failed to initialize notes store");
+    let notes_state: NotesState = Arc::new(notes_store);
+
+    let p2p_manager = P2PManager::new().expect("Failed to initialize P2P manager");
+    let p2p_state: P2PState = Arc::new(p2p_manager);
+
+    let sync_engine = SyncEngine::new(notes_state.clone(), p2p_state.clone())
+        .expect("Failed to initialize sync engine");
+    let sync_state: SyncStateType = Arc::new(sync_engine);
+
+    let transfer_manager = TransferManager::new();
+    let transfer_state: TransferState = Arc::new(transfer_manager);
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .manage(config_state)
+        .manage(notes_state)
+        .manage(p2p_state)
+        .manage(sync_state)
+        .manage(transfer_state)
+        .manage(Arc::new(RwLock::new(scheduler)))
+        .setup(move |app| {
+            let scheduler_state: Arc<RwLock<Scheduler>> = app.state::<Arc<RwLock<Scheduler>>>().inner().clone();
+            
+            tauri::async_runtime::spawn(async move {
+                let sched = scheduler_state.read().await;
+                sched.start().await;
+            });
+
+            let sync_state_clone: SyncStateType = app.state::<SyncStateType>().inner().clone();
+            
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+                info!("Auto-sync would start if enabled...");
+                sync_state_clone.start_auto_sync().await;
+            });
+
+            // Tray icon temporarily disabled
+            info!("Application starting...");
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            get_config,
+            save_config,
+            add_rule,
+            update_rule,
+            delete_rule,
+            toggle_rule,
+            execute_rule_now,
+            get_status,
+            toggle_wifi,
+            toggle_bluetooth,
+            toggle_airplane_mode,
+            run_custom_command,
+            create_note,
+            update_note,
+            delete_note,
+            get_note,
+            list_notes,
+            search_notes,
+            get_note_colors,
+            get_note_categories,
+            get_p2p_config,
+            save_p2p_config,
+            add_peer,
+            remove_peer,
+            update_peer,
+            check_peer_status,
+            check_all_peers,
+            discover_tailscale,
+            get_sync_state,
+            sync_with_peer,
+            sync_all_peers,
+            export_notes,
+            import_notes,
+            get_sync_folder,
+            get_transfer_queue,
+            upload_file,
+            download_file,
+            cancel_transfer,
+            clear_completed_transfers,
+            get_transfer_progress,
+            browse_remote_files,
+            get_device_id,
+            get_device_name,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
