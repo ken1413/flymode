@@ -164,7 +164,7 @@ fn run_pty_loop(
             .channel_session()
             .map_err(|e: ssh2::Error| TerminalError::Ssh(e.to_string()))?;
         find_ch
-            .exec("bash -lc 'which openclaw' 2>/dev/null || find /home /usr/local/bin /usr/bin /opt -maxdepth 5 -name openclaw -type f 2>/dev/null | head -1")
+            .exec("bash -lc 'which openclaw' 2>/dev/null || find /home /usr/local/bin /usr/bin /opt -maxdepth 5 -name openclaw \\( -type f -o -type l \\) 2>/dev/null | head -1")
             .map_err(|e: ssh2::Error| TerminalError::Ssh(e.to_string()))?;
         let mut output = String::new();
         find_ch.read_to_string(&mut output)
