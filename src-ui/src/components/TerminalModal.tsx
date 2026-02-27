@@ -135,6 +135,8 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
         // the textarea, so old composed text replays on next composition.
         const xtermTextarea = termRef.current?.querySelector('textarea') as HTMLTextAreaElement | null;
         if (xtermTextarea) {
+          // Clear textarea upfront so first composition starts clean
+          xtermTextarea.value = '';
           xtermTextarea.addEventListener('compositionend', () => {
             setTimeout(() => { xtermTextarea.value = ''; }, 50);
           });
