@@ -53,6 +53,8 @@ export function NotesTab() {
 
   useEffect(() => {
     loadNotes();
+    const interval = setInterval(loadNotes, 5000);
+    return () => clearInterval(interval);
   }, [loadNotes]);
 
   const searchNotes = async () => {
