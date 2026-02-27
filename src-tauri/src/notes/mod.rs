@@ -250,6 +250,9 @@ impl NotesStore {
     }
 
     pub fn update(&self, note: &Note) -> Result<(), NotesError> {
+        // Always recompute sync_hash so the sync engine can detect changes
+        let fresh_hash = note.compute_hash();
+
         let conn = self.get_conn()?;
         conn.execute(
             "UPDATE notes SET
@@ -271,7 +274,7 @@ impl NotesStore {
                 note.position_y,
                 note.width,
                 note.height,
-                note.sync_hash,
+                fresh_hash,
                 note.deleted as i32,
                 note.id,
             ],
