@@ -97,23 +97,16 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
         sessionIdRef.current = sid;
 
         // IME composition tracking to prevent double input
+        // compositionstart → skip onData; compositionend → allow onData again
+        // xterm.js internally fires onData with composed text after compositionend
         let composing = false;
         const xtermTextarea = termRef.current?.querySelector('textarea');
         if (xtermTextarea) {
           xtermTextarea.addEventListener('compositionstart', () => {
             composing = true;
           });
-          xtermTextarea.addEventListener('compositionend', (e: Event) => {
+          xtermTextarea.addEventListener('compositionend', () => {
             composing = false;
-            // Send the final composed text
-            const ce = e as CompositionEvent;
-            if (ce.data && sessionIdRef.current) {
-              const encoded = new TextEncoder().encode(ce.data);
-              invoke('send_terminal_input', {
-                sessionId: sessionIdRef.current,
-                data: Array.from(encoded),
-              }).catch(() => {});
-            }
           });
         }
 
