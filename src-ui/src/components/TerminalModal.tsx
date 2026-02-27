@@ -96,35 +96,10 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
       .then((sid) => {
         sessionIdRef.current = sid;
 
-        // IME handling: let xterm.js handle composition internally,
-        // send composed text from compositionend, block onData during composing
-        let composing = false;
-        let composingTimer: ReturnType<typeof setTimeout> | null = null;
-        const xtermTextarea = termRef.current?.querySelector('textarea');
-        if (xtermTextarea) {
-          xtermTextarea.addEventListener('compositionstart', () => {
-            composing = true;
-            if (composingTimer) { clearTimeout(composingTimer); composingTimer = null; }
-          });
-          xtermTextarea.addEventListener('compositionend', (e: Event) => {
-            const ce = e as CompositionEvent;
-            if (ce.data && sessionIdRef.current) {
-              const encoded = new TextEncoder().encode(ce.data);
-              invoke('send_terminal_input', {
-                sessionId: sessionIdRef.current,
-                data: Array.from(encoded),
-              }).catch(() => {});
-            }
-            // Keep composing=true for 300ms to block leaked raw keystrokes
-            // and xterm's internal onData that re-fires the same text
-            if (composingTimer) clearTimeout(composingTimer);
-            composingTimer = setTimeout(() => { composing = false; }, 300);
-          });
-        }
-
-        // Forward keystrokes to backend (blocked during IME composing)
+        // Forward keystrokes to backend
+        // xterm.js v5 has built-in CompositionHelper that handles IME natively.
+        // Do NOT add custom composition event listeners — they interfere and cause duplicates.
         term.onData((data: string) => {
-          if (composing) return;
           if (sessionIdRef.current) {
             const encoded = new TextEncoder().encode(data);
             invoke('send_terminal_input', {
