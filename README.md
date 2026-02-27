@@ -29,13 +29,15 @@
 在任何 Linux (Ubuntu/Fedora/Arch) 或 macOS 電腦上執行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/setup.sh | bash
+curl -fsSL https://gist.githubusercontent.com/ken1413/756e1cd8131583561c138a33cc401984/raw/setup.sh | bash
 ```
+
+> **注意：** 此為私有 repo，安裝過程中會自動安裝 GitHub CLI (`gh`) 並提示登入 GitHub 帳號以取得 clone 權限。
 
 安裝腳本會自動處理：
 - 系統依賴（GTK、WebKit、OpenSSL 等）
-- Rust 工具鏈
-- Node.js 22 LTS
+- Rust 工具鏈 + Node.js 22 LTS
+- GitHub CLI（認證 clone 私有 repo）
 - Tauri CLI
 - Clone、編譯、安裝 binary 到 `~/.local/bin/flymode`
 - 建立桌面捷徑（Linux）

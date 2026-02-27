@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# FlyMode — one-line installer
-# curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/setup.sh | bash
+# FlyMode — one-line installer (private repo, requires gh auth)
+# curl -fsSL https://gist.githubusercontent.com/ken1413/756e1cd8131583561c138a33cc401984/raw/setup.sh | bash
 set -euo pipefail
 
-REPO="https://github.com/ken1413/flymode.git"
+REPO="ken1413/flymode"
 INSTALL_DIR="$HOME/app/flymode"
 BIN_DIR="$HOME/.local/bin"
 
@@ -122,6 +122,37 @@ install_node() {
     ok "Node.js installed ($(node -v))"
 }
 
+# ── GitHub CLI ─────────────────────────────────────────────────
+install_gh() {
+    if need_cmd gh; then
+        ok "GitHub CLI already installed"
+    else
+        info "Installing GitHub CLI..."
+        if [ "$OS" = "linux" ]; then
+            case "$PKG_MGR" in
+                apt)
+                    sudo mkdir -p -m 755 /etc/apt/keyrings
+                    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+                    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+                    sudo apt-get update -qq && sudo apt-get install -y -qq gh
+                    ;;
+                dnf) sudo dnf install -y gh ;;
+                pacman) sudo pacman -S --noconfirm github-cli ;;
+            esac
+        elif [ "$OS" = "macos" ]; then
+            brew install gh
+        fi
+        ok "GitHub CLI installed"
+    fi
+
+    # Check auth
+    if ! gh auth status &>/dev/null; then
+        warn "GitHub CLI not authenticated. Please log in now:"
+        gh auth login
+    fi
+    ok "GitHub CLI authenticated"
+}
+
 # ── Tauri CLI ──────────────────────────────────────────────────
 install_tauri_cli() {
     if need_cmd cargo-tauri; then
@@ -141,11 +172,12 @@ clone_repo() {
     elif [ -d "$INSTALL_DIR" ]; then
         info "Directory exists but is not a git repo, cloning fresh..."
         rm -rf "$INSTALL_DIR"
-        git clone "$REPO" "$INSTALL_DIR"
+        mkdir -p "$(dirname "$INSTALL_DIR")"
+        gh repo clone "$REPO" "$INSTALL_DIR"
     else
         info "Cloning FlyMode..."
         mkdir -p "$(dirname "$INSTALL_DIR")"
-        git clone "$REPO" "$INSTALL_DIR"
+        gh repo clone "$REPO" "$INSTALL_DIR"
     fi
     ok "Source ready at $INSTALL_DIR"
 }
@@ -232,6 +264,7 @@ main() {
     install_system_deps
     install_rust
     install_node
+    install_gh
     clone_repo
     install_tauri_cli
     build_app
