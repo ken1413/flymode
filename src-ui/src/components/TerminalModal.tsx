@@ -41,6 +41,8 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
 
     const term = new Terminal({
       cursorBlink: true,
+      cursorStyle: 'block',
+      cursorInactiveStyle: 'outline',
       fontSize: 14,
       fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
       theme: {
@@ -95,6 +97,7 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
     })
       .then((sid) => {
         sessionIdRef.current = sid;
+        term.focus();
 
         // Forward all keystrokes (including IME composed text) to backend.
         // xterm.js's CompositionHelper handles IME and fires onData with
@@ -174,7 +177,11 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
             x
           </button>
         </div>
-        <div class="terminal-container" ref={termRef} />
+        <div
+          class="terminal-container"
+          ref={termRef}
+          onClick={() => terminalRef.current?.focus()}
+        />
       </div>
     </div>
   );
