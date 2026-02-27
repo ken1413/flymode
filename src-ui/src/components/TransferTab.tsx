@@ -42,12 +42,16 @@ export function TransferTab() {
   }, [loadQueue, loadP2PConfig]);
 
   const selectFile = async () => {
-    const selected = await open({
-      multiple: false,
-      title: 'Select file to upload',
-    });
-    if (selected) {
-      setLocalPath(selected as string);
+    try {
+      const selected = await open({
+        multiple: false,
+        title: 'Select file to upload',
+      });
+      if (selected) {
+        setLocalPath(selected as string);
+      }
+    } catch (e) {
+      toast.error('Failed to open file picker: ' + e);
     }
   };
 
@@ -86,10 +90,16 @@ export function TransferTab() {
   };
 
   const startDownload = async (peer: PeerDevice, filePath: string, fileName: string) => {
-    const downloadPath = await open({
-      directory: true,
-      title: 'Select download folder',
-    });
+    let downloadPath: string | null;
+    try {
+      downloadPath = await open({
+        directory: true,
+        title: 'Select download folder',
+      });
+    } catch (e) {
+      toast.error('Failed to open folder picker: ' + e);
+      return;
+    }
 
     if (!downloadPath) return;
 
