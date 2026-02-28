@@ -2,7 +2,7 @@
 
 Cross-platform desktop app — Wireless Scheduling + P2P Device Sync + Sticky Notes + File Transfer + Remote Terminal
 
-Version: v0.2.0 | Last updated: 2026-02-28
+Version: v0.2.0 | Last updated: 2026-03-01
 
 ---
 
@@ -412,7 +412,12 @@ FlyMode has a built-in TCP pairing service (port 4827):
 
 #### OpenClaw Detection
 
-If the remote device is running OpenClaw, a ">_" terminal button appears on the device card. Detection runs every 120 seconds.
+FlyMode detects OpenClaw on both the local machine and remote devices:
+
+- **Local**: Uses `pgrep` (no SSH needed) — if detected, a ">_" button appears on the "This Device" card
+- **Remote**: Runs `pgrep -f openclaw` via SSH — if detected, a ">_" button appears on the device card
+
+Detection runs every 120 seconds.
 
 ---
 
@@ -536,13 +541,38 @@ Click the ">_" button on any device card, and FlyMode will automatically:
 
 The entire process requires a single click — no need to remember hostnames, IPs, paths, or commands.
 
-#### Multi-Device Management
+#### Local OpenClaw
 
-If you have multiple machines running OpenClaw, FlyMode shows a ">_" button on each device card. You can:
+FlyMode doesn't just detect remote devices — it also detects **local** OpenClaw. If OpenClaw is running on the local machine, a ">_" button appears on the "This Device" card. Clicking it connects via SSH localhost.
 
-- Connect to different OpenClaw instances one by one
-- Manage all remote OpenClaw nodes from a single FlyMode window
-- Use Tailscale for cross-network management (e.g., home NAS, office server, cloud VPS)
+- Local detection uses `pgrep` (no SSH needed) — faster than remote detection
+- If no SSH key is found on the local machine, a password prompt appears
+- The password is remembered for the current FlyMode session (no re-prompting)
+
+#### Multi-Device Tab Switching
+
+If you have multiple machines running OpenClaw (including the local machine), FlyMode provides a **browser-tab style** multi-session terminal:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ [● My PC (localhost)] [○ Office Server] [○ Home NAS]  [x] │
+├──────────────────────────────────────────────────────────┤
+│                                                            │
+│              active device's OpenClaw TUI                  │
+│              (xterm.js)                                    │
+│                                                            │
+└──────────────────────────────────────────────────────────┘
+```
+
+- **Device Navbar**: Lists all devices with OpenClaw detected (local machine first)
+- **Status dots**: 🟢 Connected, 🔵 Connecting (pulsing), 🔴 Error, ⚪ Not yet connected
+- **First click** on a device → establishes SSH connection + xterm instance
+- **Subsequent clicks** on a connected device → just switches display, session keeps running
+- Each xterm instance runs independently (show/hide toggle, no destroy/recreate)
+- Closing `[x]` → closes **all** SSH sessions, modal disappears
+- If only one device has OpenClaw → navbar is hidden, behaves like a single session
+
+Combine with Tailscale for cross-network management (local machine, home NAS, office server, cloud VPS) — all switchable within the same window.
 
 #### Terminal Features
 
@@ -574,7 +604,8 @@ If you have multiple machines running OpenClaw, FlyMode shows a ">_" button on e
 | Path discovery | `bash -lc 'which openclaw'` → multi-directory `find` including symlinks |
 | Encoding | UTF-8 (auto-sets `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8`) |
 | IME handling | 50ms dedup + compositionend clear, prevents duplicate characters and text accumulation |
-| Session management | Each connection has a unique Session ID, SSH cleaned up on close |
+| Session management | Multi-session tab switching, each with unique Session ID, show/hide without destroy |
+| Local detection | `pgrep` (no SSH), auto-detects username and SSH key path |
 
 ---
 
@@ -877,7 +908,8 @@ All inter-device communication (sync, file transfer, terminal) goes through encr
 
 | Problem | Solution |
 |---------|----------|
-| No ">_" button | 1. Ensure OpenClaw Gateway is running on the remote device (`pgrep -f openclaw-gateway`)<br>2. Ensure the device is marked as Trusted<br>3. Ensure the device status is Online<br>4. Wait 120 seconds for the detection scan to complete |
+| No ">_" button | 1. Ensure OpenClaw is running (local: `pgrep -f openclaw`; remote: must be Trusted and Online)<br>2. Wait 120 seconds for the detection scan to complete |
+| Local connection fails "No SSH key or password" | No SSH key on local machine → click ">_" to get a password prompt, enter your system password |
 | Terminal connection fails | 1. Verify SSH is working (test sync first)<br>2. Ensure `openclaw` is installed and its path is discoverable |
 | "openclaw not found" error | Ensure the `openclaw` binary is in PATH, or in `/usr/local/bin`, `/usr/bin`, `/opt`, etc. |
 | CJK input duplicates | Update to the latest FlyMode version (fixed) |
@@ -1020,6 +1052,8 @@ All inter-device communication (sync, file transfer, terminal) goes through encr
 
 | Command | Function |
 |---------|----------|
+| `check_local_openclaw` | Detect local OpenClaw status (pgrep, no SSH) |
+| `get_local_ssh_info` | Get local SSH username and key path |
 | `check_openclaw_status` | Detect remote OpenClaw status |
 | `open_terminal` | Open SSH PTY connection |
 | `send_terminal_input` | Send keystrokes to terminal |
@@ -1052,5 +1086,5 @@ All inter-device communication (sync, file transfer, terminal) goes through encr
 
 ---
 
-*Last updated: 2026-02-28*
+*Last updated: 2026-03-01*
 *Version: v0.2.0*

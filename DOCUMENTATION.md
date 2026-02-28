@@ -2,7 +2,7 @@
 
 跨平台桌面應用程式 — 無線控制 + P2P 裝置同步 + 便利貼 + 檔案傳輸 + 遠端終端機
 
-版本：v0.2.0 | 最後更新：2026-02-28
+版本：v0.2.0 | 最後更新：2026-03-01
 
 ---
 
@@ -412,7 +412,12 @@ FlyMode 內建 TCP 配對服務（port 4827）：
 
 #### OpenClaw 偵測
 
-若遠端裝置上有 OpenClaw 程式正在執行，裝置卡片上會顯示「>_」終端機按鈕。偵測每 120 秒自動執行一次。
+FlyMode 會偵測本機和遠端裝置上的 OpenClaw：
+
+- **本機**：使用 `pgrep`（不需 SSH），若偵測到則「This Device」卡片顯示「>_」按鈕
+- **遠端裝置**：透過 SSH 執行 `pgrep -f openclaw`，偵測到則裝置卡片顯示「>_」按鈕
+
+偵測每 120 秒自動執行一次。
 
 ---
 
@@ -536,13 +541,38 @@ FlyMode 會自動偵測遠端裝置上的 OpenClaw：
 
 整個過程只需一次點擊，無需記住遠端主機名、IP、路徑或任何命令。
 
-#### 多裝置管理
+#### 本機 OpenClaw
 
-如果你有多台機器都安裝了 OpenClaw，FlyMode 會在每台裝置的卡片上分別顯示「>_」按鈕。你可以：
+FlyMode 不只偵測遠端裝置，也會偵測**本機**的 OpenClaw。若本機正在執行 OpenClaw，「This Device」卡片右上角會出現「>_」按鈕，點擊即可透過 SSH localhost 開啟本機的 OpenClaw TUI。
 
-- 依序連線不同裝置的 OpenClaw TUI
-- 在同一台 FlyMode 內管理所有遠端 OpenClaw 實例
-- 搭配 Tailscale 跨網路管理（如家裡的 NAS、辦公室的伺服器、雲端 VPS）
+- 本機偵測使用 `pgrep`（不需 SSH），速度更快
+- 若本機沒有 SSH 金鑰，點擊時會彈出密碼輸入框
+- 密碼在同一次 FlyMode 執行期間會被記住，不需重複輸入
+
+#### 多裝置分頁切換
+
+如果你有多台機器都安裝了 OpenClaw（包含本機），FlyMode 提供**瀏覽器分頁風格**的多 session 終端機：
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ [● 我的電腦 (localhost)] [○ 辦公室伺服器] [○ 家裡NAS] [x] │
+├──────────────────────────────────────────────────────────┤
+│                                                            │
+│              active device 的 OpenClaw TUI                 │
+│              (xterm.js)                                    │
+│                                                            │
+└──────────────────────────────────────────────────────────┘
+```
+
+- **Device Navbar**：列出所有偵測到 OpenClaw 的裝置（本機排在最前面）
+- **狀態圓點**：🟢 已連線、🔵 連線中（脈動動畫）、🔴 連線失敗、⚪ 尚未連線
+- **首次點擊**某裝置 → 建立 SSH 連線 + xterm 實例
+- **再次點擊**已連線裝置 → 只切換顯示，session 保持運作
+- 每個 xterm 實例獨立運行（show/hide 切換，不銷毀/重建）
+- 關閉 `[x]` → 關閉**所有** SSH session，modal 消失
+- 若只有一台裝置有 OpenClaw → navbar 不顯示，行為和單一 session 相同
+
+你可以搭配 Tailscale 跨網路管理（如本機、家裡的 NAS、辦公室的伺服器、雲端 VPS），在同一個視窗中快速切換。
 
 #### 終端機功能
 
@@ -574,7 +604,8 @@ FlyMode 會自動偵測遠端裝置上的 OpenClaw：
 | 路徑搜尋 | `bash -lc 'which openclaw'` → 多目錄 `find` 含 symlink |
 | 編碼 | UTF-8（自動設定 `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8`）|
 | IME 處理 | 50ms 去重機制 + compositionend 清除，防止重複字元和文字累積 |
-| 工作階段管理 | 每個連線獨立 Session ID，關閉時自動清理 SSH 連線 |
+| 工作階段管理 | 多 session 分頁切換，每個連線獨立 Session ID，show/hide 不銷毀 |
+| 本機偵測 | `pgrep`（不需 SSH），自動取得 username 和 SSH key path |
 
 ---
 
@@ -876,7 +907,8 @@ CREATE INDEX idx_notes_deleted ON notes(deleted);
 
 | 問題 | 解決方式 |
 |------|---------|
-| 看不到「>_」按鈕 | 1. 確認遠端裝置正在執行 OpenClaw Gateway（`pgrep -f openclaw-gateway`）<br>2. 確認該裝置已標記為 Trust<br>3. 確認裝置狀態為 Online<br>4. 等待 120 秒讓偵測掃描完成 |
+| 看不到「>_」按鈕 | 1. 確認裝置正在執行 OpenClaw（本機：`pgrep -f openclaw`；遠端：需已 Trust 且 Online）<br>2. 等待 120 秒讓偵測掃描完成 |
+| 本機連線失敗「No SSH key or password」| 本機沒有 SSH 金鑰 → 點「>_」時會彈出密碼輸入框，輸入系統密碼即可 |
 | 終端機連線失敗 | 1. 確認 SSH 連線正常（先測試同步是否正常）<br>2. 確認遠端有安裝 `openclaw` 且路徑可被找到 |
 | 顯示「openclaw not found」| 確認遠端 `openclaw` binary 在 PATH 中，或位於 `/usr/local/bin`、`/usr/bin`、`/opt` 等目錄 |
 | 中文輸入重複 | 升級到最新版 FlyMode（已修復）|
@@ -1019,6 +1051,8 @@ CREATE INDEX idx_notes_deleted ON notes(deleted);
 
 | 命令 | 功能 |
 |------|------|
+| `check_local_openclaw` | 偵測本機 OpenClaw 狀態（pgrep，不需 SSH）|
+| `get_local_ssh_info` | 取得本機 SSH 使用者名稱和金鑰路徑 |
 | `check_openclaw_status` | 偵測遠端 OpenClaw 狀態 |
 | `open_terminal` | 開啟 SSH PTY 連線 |
 | `send_terminal_input` | 傳送按鍵到終端機 |
@@ -1051,5 +1085,5 @@ CREATE INDEX idx_notes_deleted ON notes(deleted);
 
 ---
 
-*文件最後更新：2026-02-28*
+*文件最後更新：2026-03-01*
 *版本：v0.2.0*

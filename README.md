@@ -9,16 +9,16 @@
 
 FlyMode 深度整合 OpenClaw — 自動偵測遠端裝置上的 OpenClaw Gateway，一鍵開啟內嵌式終端機直接操作 OpenClaw TUI：
 
-- **自動偵測**：每 120 秒掃描所有信任裝置，偵測到 OpenClaw Gateway 即顯示「>_」按鈕
+- **自動偵測**：每 120 秒掃描本機和所有信任裝置，偵測到 OpenClaw 即顯示「>_」按鈕
 - **一鍵連線**：點擊按鈕即透過 SSH PTY 連線，自動定位 `openclaw` 路徑並啟動 TUI
 - **完整終端體驗**：xterm-256color、動態視窗縮放、中文/日文 IME 輸入、剪貼簿整合
-- **多裝置管理**：同時管理多台安裝 OpenClaw 的遠端機器，在 FlyMode 內一站式操控
+- **多裝置分頁切換**：瀏覽器分頁風格的多 session 終端，在同一個視窗中快速切換本機和遠端的 OpenClaw
 
 ## 功能一覽
 
 | 功能 | 說明 |
 |------|------|
-| **OpenClaw 遠端管理** | 自動偵測 OpenClaw Gateway、一鍵開啟 TUI、多裝置管理、中文 IME 支援 |
+| **OpenClaw 遠端管理** | 自動偵測本機和遠端 OpenClaw、一鍵開啟 TUI、多裝置分頁切換、中文 IME 支援 |
 | **便利貼筆記** | 8 種顏色、7 種類別、標籤、釘選、全文搜尋，自動同步到所有信任裝置 |
 | **P2P 裝置管理** | TCP 配對協議、Tailscale 自動發現、SSH 金鑰/密碼認證、信任機制 |
 | **資料同步** | Last-Write-Wins 衝突解決、自動/手動同步、匯出/匯入 JSON |

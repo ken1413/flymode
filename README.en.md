@@ -8,16 +8,16 @@ A cross-platform desktop app with built-in **[OpenClaw](https://github.com/openc
 
 FlyMode provides deep integration with OpenClaw — automatically detects OpenClaw Gateway running on remote devices and lets you manage them through an embedded terminal with one click:
 
-- **Auto-Detection**: Scans all trusted devices every 120 seconds; shows a ">_" button when OpenClaw Gateway is found
-- **One-Click Connect**: Click the button to SSH into the remote machine, auto-locate the `openclaw` binary, and launch its TUI
+- **Auto-Detection**: Scans the local machine and all trusted devices every 120 seconds; shows a ">_" button when OpenClaw is found
+- **One-Click Connect**: Click the button to SSH into the machine, auto-locate the `openclaw` binary, and launch its TUI
 - **Full Terminal Experience**: xterm-256color, dynamic window resizing, CJK IME input support, clipboard integration
-- **Multi-Device Management**: Manage multiple OpenClaw instances across different machines from a single FlyMode window
+- **Multi-Device Tab Switching**: Browser-tab style multi-session terminal — switch between local and remote OpenClaw instances in a single window
 
 ## Features
 
 | Feature | Description |
 |---------|-------------|
-| **OpenClaw Remote Management** | Auto-detect OpenClaw Gateway, one-click TUI launch, multi-device management, CJK IME support |
+| **OpenClaw Remote Management** | Auto-detect local and remote OpenClaw, one-click TUI launch, multi-device tab switching, CJK IME support |
 | **Sticky Notes** | 8 colors, 7 categories, tags, pinning, full-text search, auto-sync across trusted devices |
 | **P2P Device Management** | TCP pairing protocol, Tailscale auto-discovery, SSH key/password auth, trust model |
 | **Data Sync** | Last-Write-Wins conflict resolution, auto/manual sync, JSON export/import |
