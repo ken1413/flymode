@@ -1109,6 +1109,24 @@ input[type="checkbox"] {
   min-height: 1px !important;
 }
 
+.terminal-password-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.terminal-password-dialog {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  width: 320px;
+}
+
 .btn-terminal {
   padding: 4px 8px;
   font-size: 12px;

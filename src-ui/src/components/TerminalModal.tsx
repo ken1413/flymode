@@ -57,9 +57,16 @@ const TERM_OPTIONS = {
   },
 };
 
+function needsPassword(peer: PeerDevice): boolean {
+  return peer.id === '__local__' && !peer.ssh_key_path && !peer.ssh_password;
+}
+
 export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalModalProps) {
   const [sessions, setSessions] = useState<Map<string, TermSession>>(new Map());
   const [activePeerId, setActivePeerId] = useState<string>(initialPeer.id);
+  const [peersWithCreds, setPeersWithCreds] = useState<Map<string, PeerDevice>>(new Map());
+  const [passwordPrompt, setPasswordPrompt] = useState<PeerDevice | null>(null);
+  const [passwordInput, setPasswordInput] = useState('');
   const sessionsRef = useRef<Map<string, TermSession>>(new Map());
   const closingRef = useRef(false);
   const containerRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -273,6 +280,10 @@ export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalM
     }
   }, [initialPeer, connectPeer]);
 
+  const resolvePeer = useCallback((peer: PeerDevice): PeerDevice => {
+    return peersWithCreds.get(peer.id) || peer;
+  }, [peersWithCreds]);
+
   const handleDeviceClick = useCallback((peer: PeerDevice) => {
     const session = sessionsRef.current.get(peer.id);
     if (session && (session.status === 'connected' || session.status === 'connecting' || session.status === 'error')) {
@@ -285,10 +296,17 @@ export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalM
         if (s?.terminal) s.terminal.focus();
       });
     } else {
-      // Need to connect — set active first so container renders
-      setActivePeerId(peer.id);
+      const resolved = peersWithCreds.get(peer.id) || peer;
+      if (needsPassword(resolved)) {
+        // Show password prompt before connecting
+        setPasswordInput('');
+        setPasswordPrompt(peer);
+      } else {
+        // Connect directly
+        setActivePeerId(peer.id);
+      }
     }
-  }, []);
+  }, [peersWithCreds]);
 
   // When activePeerId changes and there's no session, connect once container mounts
   useEffect(() => {
@@ -298,14 +316,18 @@ export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalM
     const peer = openclawPeers.find(p => p.id === activePeerId);
     if (!peer) return;
 
+    const resolved = peersWithCreds.get(peer.id) || peer;
+    // Don't auto-connect if password is needed
+    if (needsPassword(resolved)) return;
+
     // Wait for container ref via requestAnimationFrame
     requestAnimationFrame(() => {
       const container = containerRefs.current.get(activePeerId);
       if (container && !sessionsRef.current.has(activePeerId)) {
-        connectPeer(peer, container);
+        connectPeer(resolved, container);
       }
     });
-  }, [activePeerId, openclawPeers, connectPeer]);
+  }, [activePeerId, openclawPeers, connectPeer, peersWithCreds]);
 
   // Fit active terminal on window resize
   useEffect(() => {
@@ -318,6 +340,19 @@ export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalM
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [activePeerId]);
+
+  const handlePasswordSubmit = useCallback(() => {
+    if (!passwordPrompt || !passwordInput) return;
+    const peerWithPass = { ...passwordPrompt, ssh_password: passwordInput };
+    setPeersWithCreds(prev => {
+      const next = new Map(prev);
+      next.set(passwordPrompt.id, peerWithPass);
+      return next;
+    });
+    setPasswordPrompt(null);
+    setPasswordInput('');
+    setActivePeerId(passwordPrompt.id);
+  }, [passwordPrompt, passwordInput]);
 
   const handleOverlayClick = (e: MouseEvent) => {
     if ((e.target as HTMLElement).classList.contains('terminal-overlay')) {
@@ -386,6 +421,29 @@ export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalM
             />
           ))}
         </div>
+
+        {passwordPrompt && (
+          <div class="terminal-password-overlay">
+            <div class="terminal-password-dialog">
+              <div style={{ marginBottom: '12px', fontWeight: 500 }}>
+                SSH Password ({passwordPrompt.ssh_user}@{passwordPrompt.ip_address})
+              </div>
+              <input
+                type="password"
+                class="form-control"
+                value={passwordInput}
+                onInput={e => setPasswordInput(e.currentTarget.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && passwordInput) handlePasswordSubmit(); }}
+                placeholder="SSH password"
+                autoFocus
+              />
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '12px' }}>
+                <button class="btn btn-icon btn-sm" onClick={() => setPasswordPrompt(null)}>Cancel</button>
+                <button class="btn btn-primary btn-sm" disabled={!passwordInput} onClick={handlePasswordSubmit}>Connect</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
