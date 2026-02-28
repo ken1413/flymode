@@ -27,6 +27,8 @@ export function P2PTab() {
   const [pairingIp, setPairingIp] = useState<string | null>(null);
   const [openclawPeers, setOpenclawPeers] = useState<Set<string>>(new Set());
   const [localPeer, setLocalPeer] = useState<PeerDevice | null>(null);
+  const [localPasswordPrompt, setLocalPasswordPrompt] = useState(false);
+  const [localPassword, setLocalPassword] = useState('');
   const [showTerminal, setShowTerminal] = useState(false);
   const [initialTerminalPeer, setInitialTerminalPeer] = useState<PeerDevice | null>(null);
   const [form, setForm] = useState<PeerFormData>({
@@ -383,8 +385,13 @@ export function P2PTab() {
             <button
               class="btn-terminal"
               onClick={() => {
-                setInitialTerminalPeer(localPeer);
-                setShowTerminal(true);
+                if (localPeer.ssh_key_path) {
+                  setInitialTerminalPeer(localPeer);
+                  setShowTerminal(true);
+                } else {
+                  setLocalPassword('');
+                  setLocalPasswordPrompt(true);
+                }
               }}
               title="Open local OpenClaw Terminal"
             >
@@ -501,6 +508,51 @@ export function P2PTab() {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {localPasswordPrompt && localPeer && (
+        <div class="modal-overlay" onClick={() => setLocalPasswordPrompt(false)}>
+          <div class="modal" style={{ maxWidth: '360px' }} onClick={e => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">SSH Password (localhost)</span>
+              <button class="modal-close" onClick={() => setLocalPasswordPrompt(false)}>×</button>
+            </div>
+            <div class="form-group">
+              <label>Password for {localPeer.ssh_user}@127.0.0.1</label>
+              <input
+                type="password"
+                class="form-control"
+                value={localPassword}
+                onInput={e => setLocalPassword(e.currentTarget.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && localPassword) {
+                    setInitialTerminalPeer({ ...localPeer, ssh_password: localPassword });
+                    setLocalPeer({ ...localPeer, ssh_password: localPassword });
+                    setLocalPasswordPrompt(false);
+                    setShowTerminal(true);
+                  }
+                }}
+                placeholder="SSH password"
+                autoFocus
+              />
+            </div>
+            <div class="modal-actions">
+              <button class="btn btn-icon" onClick={() => setLocalPasswordPrompt(false)}>Cancel</button>
+              <button
+                class="btn btn-primary"
+                disabled={!localPassword}
+                onClick={() => {
+                  setInitialTerminalPeer({ ...localPeer, ssh_password: localPassword });
+                  setLocalPeer({ ...localPeer, ssh_password: localPassword });
+                  setLocalPasswordPrompt(false);
+                  setShowTerminal(true);
+                }}
+              >
+                Connect
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
