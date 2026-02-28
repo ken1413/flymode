@@ -70,6 +70,7 @@ export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalM
   const sessionsRef = useRef<Map<string, TermSession>>(new Map());
   const closingRef = useRef(false);
   const containerRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const awaitingPasswordRef = useRef(false);
 
   // Keep ref in sync with state
   sessionsRef.current = sessions;
@@ -254,6 +255,8 @@ export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalM
 
         // If localhost failed, clear cached password so user can re-enter
         if (peer.id === '__local__') {
+          // Set ref FIRST (synchronous) to block auto-reconnect before any setState
+          awaitingPasswordRef.current = true;
           try {
             term.writeln(`\r\nConnection failed: ${e}`);
           } catch { /* terminal may already be disposed */ }
@@ -334,8 +337,8 @@ export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalM
 
   // When activePeerId changes and there's no session, connect once container mounts
   useEffect(() => {
-    // Don't auto-connect while password prompt is showing
-    if (passwordPrompt) return;
+    // Don't auto-connect while awaiting password re-entry
+    if (awaitingPasswordRef.current) return;
 
     const session = sessionsRef.current.get(activePeerId);
     if (session) return; // already exists
@@ -349,6 +352,7 @@ export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalM
 
     // Wait for container ref via requestAnimationFrame
     requestAnimationFrame(() => {
+      if (awaitingPasswordRef.current) return; // double-check after frame
       const container = containerRefs.current.get(activePeerId);
       if (container && !sessionsRef.current.has(activePeerId)) {
         connectPeer(resolved, container);
@@ -370,6 +374,7 @@ export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalM
 
   const handlePasswordSubmit = useCallback(() => {
     if (!passwordPrompt || !passwordInput) return;
+    awaitingPasswordRef.current = false;
     const peerWithPass = { ...passwordPrompt, ssh_password: passwordInput };
     setPeersWithCreds(prev => {
       const next = new Map(prev);
@@ -465,7 +470,7 @@ export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalM
                 autoFocus
               />
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '12px' }}>
-                <button class="btn btn-icon btn-sm" onClick={() => setPasswordPrompt(null)}>Cancel</button>
+                <button class="btn btn-icon btn-sm" onClick={() => { awaitingPasswordRef.current = false; setPasswordPrompt(null); }}>Cancel</button>
                 <button class="btn btn-primary btn-sm" disabled={!passwordInput} onClick={handlePasswordSubmit}>Connect</button>
               </div>
             </div>
