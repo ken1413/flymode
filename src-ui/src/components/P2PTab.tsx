@@ -26,6 +26,7 @@ export function P2PTab() {
   const [pairRequests, setPairRequests] = useState<PairRequest[]>([]);
   const [pairingIp, setPairingIp] = useState<string | null>(null);
   const [openclawPeers, setOpenclawPeers] = useState<Set<string>>(new Set());
+  const [localPeer, setLocalPeer] = useState<PeerDevice | null>(null);
   const [showTerminal, setShowTerminal] = useState(false);
   const [initialTerminalPeer, setInitialTerminalPeer] = useState<PeerDevice | null>(null);
   const [form, setForm] = useState<PeerFormData>({
@@ -74,6 +75,35 @@ export function P2PTab() {
     if (!config || checkingOpenclawRef.current) return;
     checkingOpenclawRef.current = true;
     try {
+      // Check local OpenClaw (no SSH, fast)
+      try {
+        const localRunning = await invoke<boolean>('check_local_openclaw');
+        if (localRunning && config) {
+          const [username, keyPath] = await invoke<[string, string | null]>('get_local_ssh_info');
+          setLocalPeer({
+            id: '__local__',
+            name: `${config.device_name} (localhost)`,
+            hostname: 'localhost',
+            ip_address: '127.0.0.1',
+            port: 22,
+            connection_type: 'LanDirect',
+            status: 'Online',
+            last_seen: null,
+            ssh_user: username,
+            ssh_key_path: keyPath,
+            ssh_password: null,
+            is_trusted: true,
+            tailscale_hostname: null,
+            flymode_version: null,
+          });
+        } else {
+          setLocalPeer(null);
+        }
+      } catch {
+        setLocalPeer(null);
+      }
+
+      // Check remote peers
       const results = new Set<string>();
       for (const peer of config.peers) {
         if (peer.is_trusted && peerStatuses.get(peer.id) === 'Online') {
@@ -349,6 +379,18 @@ export function P2PTab() {
       <div class="card">
         <div class="card-header">
           <span class="card-title">This Device</span>
+          {localPeer && (
+            <button
+              class="btn-terminal"
+              onClick={() => {
+                setInitialTerminalPeer(localPeer);
+                setShowTerminal(true);
+              }}
+              title="Open local OpenClaw Terminal"
+            >
+              {'>_'}
+            </button>
+          )}
         </div>
         <div class="device-info">
           <div class="info-row">
@@ -464,7 +506,10 @@ export function P2PTab() {
 
       {showTerminal && initialTerminalPeer && (
         <TerminalModal
-          openclawPeers={config.peers.filter(p => openclawPeers.has(p.id))}
+          openclawPeers={[
+            ...(localPeer ? [localPeer] : []),
+            ...config.peers.filter(p => openclawPeers.has(p.id)),
+          ]}
           initialPeer={initialTerminalPeer}
           onClose={() => {
             setShowTerminal(false);

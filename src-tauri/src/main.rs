@@ -221,6 +221,8 @@ fn main() {
             verify_system_password,
             get_device_id,
             get_device_name,
+            check_local_openclaw,
+            get_local_ssh_info,
             check_openclaw_status,
             open_terminal,
             send_terminal_input,

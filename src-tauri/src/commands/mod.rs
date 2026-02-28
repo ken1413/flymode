@@ -383,6 +383,37 @@ pub fn verify_system_password(password: String) -> Result<bool, String> {
     Ok(status.success())
 }
 
+// Local OpenClaw detection (no SSH needed)
+#[tauri::command]
+pub async fn check_local_openclaw() -> Result<bool, String> {
+    tokio::task::spawn_blocking(|| {
+        std::process::Command::new("pgrep")
+            .args(["-f", "openclaw"])
+            .stdout(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_local_ssh_info() -> Result<(String, Option<String>), String> {
+    let username = std::env::var("USER")
+        .or_else(|_| std::env::var("USERNAME"))
+        .map_err(|_| "Cannot determine username".to_string())?;
+
+    let home = std::env::var("HOME").unwrap_or_default();
+    let key_names = ["id_ed25519", "id_rsa", "id_ecdsa"];
+    let ssh_key_path = key_names
+        .iter()
+        .map(|k| format!("{}/.ssh/{}", home, k))
+        .find(|p| std::path::Path::new(p).exists());
+
+    Ok((username, ssh_key_path))
+}
+
 // Terminal commands
 #[tauri::command]
 pub async fn check_openclaw_status(peer: PeerDevice) -> Result<bool, String> {
