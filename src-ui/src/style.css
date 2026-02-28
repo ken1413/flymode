@@ -992,6 +992,7 @@ input[type="checkbox"] {
 }
 
 .terminal-modal {
+  position: relative;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 12px;

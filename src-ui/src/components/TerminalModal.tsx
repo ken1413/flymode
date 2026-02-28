@@ -250,14 +250,18 @@ export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalM
         requestAnimationFrame(() => term.focus());
       })
       .catch((e) => {
-        term.writeln(`\r\nConnection failed: ${e}`);
         toast.error(`Terminal connection failed: ${e}`);
 
         // If localhost failed, clear cached password so user can re-enter
         if (peer.id === '__local__') {
-          if (pasteHandler) containerEl.removeEventListener('keydown', pasteHandler);
-          if (resizeObserver) resizeObserver.disconnect();
-          term.dispose();
+          try {
+            term.writeln(`\r\nConnection failed: ${e}`);
+          } catch { /* terminal may already be disposed */ }
+          try {
+            if (pasteHandler) containerEl.removeEventListener('keydown', pasteHandler);
+            if (resizeObserver) resizeObserver.disconnect();
+            term.dispose();
+          } catch { /* cleanup best-effort */ }
           setPeersWithCreds(prev => {
             const next = new Map(prev);
             next.delete('__local__');
@@ -268,7 +272,7 @@ export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalM
             next.delete(peer.id);
             return next;
           });
-          // Auto re-prompt
+          // Always re-prompt for password
           setPasswordInput('');
           setPasswordPrompt(peer);
         } else {
