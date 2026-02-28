@@ -39,6 +39,26 @@ sudo apt install libgtk-3-dev libwebkit2gtk-4.0-dev \
                  libssl-dev pkg-config
 ```
 
+## Release Workflow
+
+```bash
+# 1. Bump version (updates Cargo.toml, tauri.conf.json, package.json)
+./bump-version.sh minor          # or: patch, major, 0.4.0
+
+# 2. Commit
+git add -A && git commit -m "chore: bump version to 0.4.0"
+
+# 3. Tag and push — triggers GitHub Actions to build and publish Release
+git tag v0.4.0
+git push && git push --tags
+```
+
+CI (`.github/workflows/release.yml`) auto-builds `.deb`, `.AppImage`, `.rpm` on tag push `v*`.
+
+**Install scripts:**
+- `install.sh` — end users: downloads pre-built package from GitHub Releases (no Rust/Node needed)
+- `setup.sh` — developers: clones repo and builds from source
+
 ## Architecture
 
 **Monorepo workspace** with two main directories:
