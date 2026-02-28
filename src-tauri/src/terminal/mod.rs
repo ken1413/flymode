@@ -62,30 +62,45 @@ impl TerminalManager {
         let sid = session_id.clone();
         let shutdown_clone = shutdown.clone();
 
+        // Oneshot channel: SSH connect result is sent back before PTY loop starts
+        let (conn_tx, conn_rx) = tokio::sync::oneshot::channel::<Result<(), String>>();
+
         let handle = tokio::task::spawn_blocking(move || {
-            if let Err(e) = run_pty_loop(peer, cols, rows, input_rx, &output_channel, shutdown_clone)
+            if let Err(e) =
+                run_pty_loop(peer, cols, rows, input_rx, &output_channel, shutdown_clone, conn_tx)
             {
                 error!("Terminal session {} ended with error: {}", sid, e);
-                // Send error message to frontend terminal
-                let msg = format!("\r\nConnection error: {}\r\n", e);
+                let msg = format!("\r\nSession error: {}\r\n", e);
                 let _ = output_channel.send(msg.into_bytes());
             } else {
                 info!("Terminal session {} ended normally", sid);
             }
         });
 
-        let session = TerminalSession {
-            _session_id: session_id.clone(),
-            _peer_id: peer_id,
-            input_tx,
-            shutdown,
-            reader_handle: Some(handle),
-        };
-
-        let mut sessions = self.sessions.write().await;
-        sessions.insert(session_id.clone(), session);
-
-        Ok(session_id)
+        // Wait for SSH connection result before returning
+        match conn_rx.await {
+            Ok(Ok(())) => {
+                // SSH connected — store session and return success
+                let session = TerminalSession {
+                    _session_id: session_id.clone(),
+                    _peer_id: peer_id,
+                    input_tx,
+                    shutdown,
+                    reader_handle: Some(handle),
+                };
+                let mut sessions = self.sessions.write().await;
+                sessions.insert(session_id.clone(), session);
+                Ok(session_id)
+            }
+            Ok(Err(e)) => {
+                // SSH auth/connection failed — return error to frontend
+                Err(TerminalError::Ssh(e))
+            }
+            Err(_) => {
+                // Spawned task died before sending result
+                Err(TerminalError::Ssh("Connection task failed unexpectedly".to_string()))
+            }
+        }
     }
 
     pub async fn send_input(
@@ -143,13 +158,25 @@ fn run_pty_loop(
     input_rx: Receiver<TerminalInput>,
     output_channel: &Channel<Vec<u8>>,
     shutdown: Arc<AtomicBool>,
+    conn_tx: tokio::sync::oneshot::Sender<Result<(), String>>,
 ) -> Result<(), TerminalError> {
     // Connect via SSH (with 10s timeout)
     let addr = format!("{}:{}", peer.ip_address, peer.port);
     let _ = output_channel.send(format!("Connecting to {}...\r\n", addr).into_bytes());
 
     let mut ssh = SSHClient::new();
-    ssh.connect(&peer).map_err(|e| TerminalError::Ssh(e.to_string()))?;
+    match ssh.connect(&peer) {
+        Ok(()) => {
+            // Signal success — open_session can return Ok to frontend
+            let _ = conn_tx.send(Ok(()));
+        }
+        Err(e) => {
+            let err_str = e.to_string();
+            // Signal failure — open_session returns Err to frontend
+            let _ = conn_tx.send(Err(err_str.clone()));
+            return Err(TerminalError::Ssh(err_str));
+        }
+    }
 
     let _ = output_channel.send(b"SSH connected. Locating openclaw...\r\n".to_vec());
 
