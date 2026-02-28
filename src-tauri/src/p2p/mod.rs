@@ -149,6 +149,13 @@ impl P2PConfig {
             .map_err(|e| P2PError::Config(e.to_string()))?;
         config.config_path = path.clone();
 
+        // Migrate old default port (4827) to new default (19131)
+        if config.listen_port == 4827 {
+            config.listen_port = DEFAULT_LISTEN_PORT;
+            // Save immediately so the migration persists
+            let _ = config.save_to_path(path);
+        }
+
         // Decrypt stored passwords
         let device_id = config.device_id.clone();
         for peer in &mut config.peers {
