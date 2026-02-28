@@ -27,6 +27,7 @@ export function P2PTab() {
   const [pairingIp, setPairingIp] = useState<string | null>(null);
   const [pairingPin, setPairingPin] = useState<string | null>(null);
   const [pinInputs, setPinInputs] = useState<Record<string, string>>({});
+  const [pairSuccessName, setPairSuccessName] = useState<string | null>(null);
   const [openclawPeers, setOpenclawPeers] = useState<Set<string>>(new Set());
   const [localPeer, setLocalPeer] = useState<PeerDevice | null>(null);
   const [localPasswordPrompt, setLocalPasswordPrompt] = useState(false);
@@ -186,9 +187,9 @@ export function P2PTab() {
         port: config!.listen_port,
       });
       if (result.accepted) {
-        toast.success(`Paired with ${peer.name} (untrusted — trust manually)`);
         await loadConfig();
         setDiscoveredPeers(prev => prev.filter(p => p.ip_address !== peer.ip_address));
+        setPairSuccessName(peer.name);
       } else {
         toast.info(`${peer.name} declined the pair request`);
       }
@@ -208,8 +209,9 @@ export function P2PTab() {
       return;
     }
     try {
+      // Find the device name before consuming the request
+      const req = pairRequests.find(r => r.id === requestId);
       await invoke('accept_pair_request', { requestId, pin: userPin });
-      toast.success('Pair request accepted (untrusted — trust manually)');
       setPinInputs(prev => {
         const next = { ...prev };
         delete next[requestId];
@@ -217,6 +219,7 @@ export function P2PTab() {
       });
       await loadConfig();
       await loadPairRequests();
+      setPairSuccessName(req?.from.device_name || 'the device');
     } catch (e) {
       toast.error('Failed to accept: ' + e);
     }
@@ -547,6 +550,36 @@ export function P2PTab() {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {pairSuccessName && (
+        <div class="modal-overlay" onClick={() => setPairSuccessName(null)}>
+          <div class="modal" style={{ maxWidth: '420px' }} onClick={e => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">Pairing Successful</span>
+            </div>
+            <div style={{ padding: '16px' }}>
+              <p style={{ marginBottom: '12px' }}>
+                <strong>{pairSuccessName}</strong> has been added to your device list.
+              </p>
+              <p style={{ marginBottom: '12px', color: 'var(--warning)', fontWeight: 'bold' }}>
+                This device is currently <strong>untrusted</strong>. To enable sync, file transfer, and terminal:
+              </p>
+              <ol style={{ paddingLeft: '20px', marginBottom: '12px', lineHeight: '1.8' }}>
+                <li>Click <strong>Edit</strong> on the device card to set <strong>SSH Username</strong> and <strong>SSH Key Path</strong> (or Password)</li>
+                <li>Click the <strong>Trust</strong> button to enable sync and transfer</li>
+              </ol>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Both machines must configure SSH credentials and trust each other for bidirectional sync.
+              </p>
+            </div>
+            <div class="modal-actions">
+              <button class="btn btn-primary" onClick={() => setPairSuccessName(null)}>
+                Got it
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -129,7 +129,7 @@ Connect your devices directly without any cloud service. FlyMode uses a custom T
 |--------|-------------|
 | **Tailscale auto-discovery** | Click "Discover Tailscale Peers" — FlyMode queries `tailscale status --json` and automatically finds all machines on your Tailscale network. No manual IP entry needed. |
 | **Manual add** | Enter the remote machine's IP address, SSH user, and port. Works on any network where machines can reach each other. |
-| **TCP pairing** | Machine A sends a pair request (TCP port 4827) → Machine B accepts → both machines are added to each other's device list with exchanged metadata. |
+| **TCP pairing** | Machine A sends a pair request (TCP port 19131, configurable in `p2p.json`) → Machine B accepts → both machines are added to each other's device list with exchanged metadata. |
 
 #### Trust Model
 
@@ -253,7 +253,7 @@ Plus a command runner: type any shell command and execute it immediately with ou
 | **Password authentication** | SSH passwords are AES-encrypted before storing in the local config file |
 | **System password lock** | Require your OS login password to open FlyMode (Linux PAM via `unix_chkpwd`) |
 | **System tray re-auth** | When restoring from tray after >1 second, re-authentication is required |
-| **No external services** | FlyMode does not phone home. The only listening port is TCP 4827 for local pairing. |
+| **No external services** | FlyMode does not phone home. The only listening port is TCP 19131 for local pairing (customizable in `~/.config/flymode/p2p.json`). |
 | **Tailscale compatible** | Combine with Tailscale for WireGuard-encrypted private networking |
 | **Auto-start** | Optional launch at system boot with system tray background mode |
 
@@ -368,15 +368,15 @@ If your machines have an active firewall, these ports need to be open:
 | Port | Protocol | Purpose |
 |------|----------|---------|
 | **22** | TCP | SSH — all P2P communication (sync, transfer, terminal) |
-| **4827** | TCP | FlyMode pairing protocol — device discovery and pairing requests |
+| **19131** | TCP | FlyMode pairing protocol — device discovery and pairing requests |
 
 ```bash
 # Ubuntu (ufw)
-sudo ufw allow 22/tcp && sudo ufw allow 4827/tcp
+sudo ufw allow 22/tcp && sudo ufw allow 19131/tcp
 
 # Fedora (firewalld)
 sudo firewall-cmd --permanent --add-service=ssh
-sudo firewall-cmd --permanent --add-port=4827/tcp
+sudo firewall-cmd --permanent --add-port=19131/tcp
 sudo firewall-cmd --reload
 ```
 
@@ -492,7 +492,7 @@ Click the **"Trust"** button on the peer's device card. After trusting:
 │  └─────────────────────────────────────────────────────────────┘ │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────────┐ │
-│  │      System Tray + Auto-Start + TCP Pairing (port 4827)     │ │
+│  │      System Tray + Auto-Start + TCP Pairing (port 19131)     │ │
 │  └─────────────────────────────────────────────────────────────┘ │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
