@@ -114,6 +114,10 @@ Tab-based UI in `App.tsx`. Each tab is a self-contained component in `components
 - Dev dependencies: `mockall` (mocking), `tempfile`, `pretty_assertions`, `proptest` (property-based), `criterion` (benchmarks)
 - Feature flag `test-helpers` available for conditional test code
 
+## P2P Configuration
+
+The pairing port and other P2P settings are stored in `~/.config/flymode/p2p.json`. The default pairing port is defined by `DEFAULT_LISTEN_PORT` constant in `src-tauri/src/p2p/mod.rs` (currently 19131). No port numbers should be hardcoded elsewhere in the codebase — always reference this constant or read from config at runtime.
+
 ## Language Note
 
 README, DOCUMENTATION.md, and code comments are in Traditional Chinese (繁體中文).

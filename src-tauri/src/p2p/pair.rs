@@ -1,7 +1,10 @@
 use chrono::{DateTime, Utc};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::net::IpAddr;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::RwLock;
@@ -10,6 +13,17 @@ use tracing::{error, info, warn};
 use tauri::Emitter;
 
 use super::{ConnectionType, DeviceStatus, P2PConfig, P2PError, PeerDevice};
+
+// --- Security constants ---
+const MAX_PENDING_REQUESTS: usize = 20;
+const RATE_LIMIT_MAX: u32 = 5;
+const RATE_LIMIT_WINDOW_SECS: u64 = 60;
+const REQUEST_EXPIRY_SECS: i64 = 300; // 5 minutes
+const CLEANUP_INTERVAL_SECS: u64 = 60;
+const MAX_DEVICE_ID_LEN: usize = 64;
+const MAX_DEVICE_NAME_LEN: usize = 128;
+const MAX_HOSTNAME_LEN: usize = 256;
+const MAX_IP_ADDRESS_LEN: usize = 45; // IPv6 max
 
 /// Information about a device participating in the pairing protocol.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -23,11 +37,18 @@ pub struct PeerInfo {
     pub flymode_version: Option<String>,
 }
 
+/// Result of an initiated pair request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairResult {
+    pub accepted: bool,
+    pub pin: Option<String>,
+}
+
 /// Messages exchanged over the pairing TCP connection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PairMessage {
-    Request { from: PeerInfo },
-    Response { accepted: bool, from: PeerInfo },
+    Request { from: PeerInfo, pin: String },
+    Response { accepted: bool, from: Option<PeerInfo> },
 }
 
 /// An incoming pair request waiting for user action.
@@ -35,7 +56,14 @@ pub enum PairMessage {
 pub struct PairRequest {
     pub id: String,
     pub from: PeerInfo,
+    pub pin: String,
     pub received_at: DateTime<Utc>,
+}
+
+/// Per-IP rate limit tracking.
+struct RateLimitEntry {
+    count: u32,
+    window_start: Instant,
 }
 
 /// Manages the TCP pairing protocol: listening for incoming requests,
@@ -46,6 +74,7 @@ pub struct PairServer {
     /// Holds open TCP streams keyed by request ID so we can send responses.
     held_streams: Arc<RwLock<HashMap<String, TcpStream>>>,
     app_handle: tauri::AppHandle,
+    rate_limiter: Arc<RwLock<HashMap<IpAddr, RateLimitEntry>>>,
 }
 
 impl PairServer {
@@ -55,6 +84,7 @@ impl PairServer {
             pending_requests: Arc::new(RwLock::new(Vec::new())),
             held_streams: Arc::new(RwLock::new(HashMap::new())),
             app_handle,
+            rate_limiter: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -104,13 +134,20 @@ impl PairServer {
 
         info!("Pair listener started on {}", addr);
 
+        // Spawn background cleanup task for expired requests
+        let cleanup_self = Arc::clone(&self);
+        tokio::spawn(async move {
+            cleanup_self.cleanup_loop().await;
+        });
+
         loop {
             match listener.accept().await {
                 Ok((stream, peer_addr)) => {
                     info!("Incoming pair connection from {}", peer_addr);
                     let server = Arc::clone(&self);
+                    let remote_ip = peer_addr.ip();
                     tokio::spawn(async move {
-                        if let Err(e) = server.handle_connection(stream, peer_addr.ip().to_string()).await {
+                        if let Err(e) = server.handle_connection(stream, remote_ip).await {
                             warn!("Error handling pair connection from {}: {}", peer_addr, e);
                         }
                     });
@@ -122,25 +159,114 @@ impl PairServer {
         }
     }
 
+    /// Periodically clean up expired pending requests and stale rate-limit entries.
+    async fn cleanup_loop(&self) {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(CLEANUP_INTERVAL_SECS)).await;
+
+            // Clean expired requests
+            let mut expired_ids = Vec::new();
+            {
+                let mut pending = self.pending_requests.write().await;
+                let now = Utc::now();
+                pending.retain(|r| {
+                    let age = (now - r.received_at).num_seconds();
+                    if age > REQUEST_EXPIRY_SECS {
+                        expired_ids.push(r.id.clone());
+                        false
+                    } else {
+                        true
+                    }
+                });
+            }
+
+            // Drop corresponding held streams
+            if !expired_ids.is_empty() {
+                let mut streams = self.held_streams.write().await;
+                for id in &expired_ids {
+                    streams.remove(id);
+                }
+                info!("Cleaned up {} expired pair requests", expired_ids.len());
+            }
+
+            // Clean stale rate-limit entries
+            {
+                let mut limiter = self.rate_limiter.write().await;
+                limiter.retain(|_, entry| entry.window_start.elapsed().as_secs() < RATE_LIMIT_WINDOW_SECS * 2);
+            }
+        }
+    }
+
+    /// Check and update rate limit for an IP. Returns true if allowed.
+    async fn check_rate_limit(&self, ip: IpAddr) -> bool {
+        let mut limiter = self.rate_limiter.write().await;
+        let now = Instant::now();
+
+        let entry = limiter.entry(ip).or_insert(RateLimitEntry {
+            count: 0,
+            window_start: now,
+        });
+
+        if now.duration_since(entry.window_start).as_secs() >= RATE_LIMIT_WINDOW_SECS {
+            // Reset window
+            entry.count = 1;
+            entry.window_start = now;
+            true
+        } else if entry.count < RATE_LIMIT_MAX {
+            entry.count += 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Validate that peer info fields don't exceed safe lengths.
+    fn validate_peer_info(info: &PeerInfo) -> bool {
+        info.device_id.len() <= MAX_DEVICE_ID_LEN
+            && info.device_name.len() <= MAX_DEVICE_NAME_LEN
+            && info.hostname.len() <= MAX_HOSTNAME_LEN
+            && info.ip_address.len() <= MAX_IP_ADDRESS_LEN
+    }
+
     /// Handle an incoming TCP connection: read a PairRequest, store it, emit event.
     async fn handle_connection(
         &self,
         mut stream: TcpStream,
-        remote_ip: String,
+        remote_ip: IpAddr,
     ) -> Result<(), P2PError> {
+        // Rate limit check
+        if !self.check_rate_limit(remote_ip).await {
+            warn!("Rate limit exceeded for {}", remote_ip);
+            return Ok(());
+        }
+
+        // Queue cap check
+        {
+            let pending = self.pending_requests.read().await;
+            if pending.len() >= MAX_PENDING_REQUESTS {
+                warn!("Pending requests queue full ({}), dropping connection from {}", MAX_PENDING_REQUESTS, remote_ip);
+                return Ok(());
+            }
+        }
+
         let msg = read_message(&mut stream).await?;
 
         match msg {
-            PairMessage::Request { mut from } => {
-                // If the peer didn't include their IP (e.g. behind NAT), use the connection IP
-                if from.ip_address.is_empty() {
-                    from.ip_address = remote_ip;
+            PairMessage::Request { mut from, pin } => {
+                // Validate field lengths
+                if !Self::validate_peer_info(&from) {
+                    warn!("Invalid peer info from {} — field too long", remote_ip);
+                    return Ok(());
                 }
+
+                // Always override IP with actual remote IP (prevent spoofing)
+                from.ip_address = remote_ip.to_string();
 
                 let request_id = uuid::Uuid::new_v4().to_string();
                 let request = PairRequest {
                     id: request_id.clone(),
                     from: from.clone(),
+                    pin,
                     received_at: Utc::now(),
                 };
 
@@ -173,24 +299,34 @@ impl PairServer {
         }
     }
 
-    /// Initiate a pair request to a remote peer. Blocks until the remote
-    /// user accepts or rejects. Returns `true` if accepted.
+    /// Initiate a pair request to a remote peer. Returns a `PairResult`
+    /// with the generated PIN and whether the remote accepted.
     pub async fn initiate_pair(
         &self,
         target_ip: &str,
         target_port: u16,
-    ) -> Result<bool, P2PError> {
+    ) -> Result<PairResult, P2PError> {
         let local_info = self.build_peer_info().await;
         let addr = format!("{}:{}", target_ip, target_port);
 
-        info!("Initiating pair request to {}", addr);
+        // Generate 6-digit PIN
+        let pin: u32 = rand::thread_rng().gen_range(100_000..999_999);
+        let pin_str = pin.to_string();
+
+        info!("Initiating pair request to {} with PIN", addr);
 
         let mut stream = TcpStream::connect(&addr).await.map_err(|e| {
             P2PError::Connection(format!("Failed to connect to {}: {}", addr, e))
         })?;
 
-        let request = PairMessage::Request { from: local_info };
+        let request = PairMessage::Request {
+            from: local_info,
+            pin: pin_str.clone(),
+        };
         write_message(&mut stream, &request).await?;
+
+        // Emit PIN to frontend so user can see it while waiting
+        let _ = self.app_handle.emit("pair-pin-generated", &pin_str);
 
         // Wait for response (with 120s timeout — user may take time to decide)
         let response = tokio::time::timeout(
@@ -203,13 +339,17 @@ impl PairServer {
         match response {
             PairMessage::Response { accepted, from } => {
                 if accepted {
-                    info!("Pair request accepted by {}", from.device_name);
-                    // Add the remote as a trusted peer
-                    self.add_peer_from_info(&from).await?;
+                    if let Some(ref peer_info) = from {
+                        info!("Pair request accepted by {}", peer_info.device_name);
+                        self.add_peer_from_info(peer_info).await?;
+                    }
                 } else {
-                    info!("Pair request rejected by {}", from.device_name);
+                    info!("Pair request rejected");
                 }
-                Ok(accepted)
+                Ok(PairResult {
+                    accepted,
+                    pin: Some(pin_str),
+                })
             }
             PairMessage::Request { .. } => {
                 warn!("Received unexpected Request as response");
@@ -220,8 +360,21 @@ impl PairServer {
         }
     }
 
-    /// Accept a pending pair request: add the remote peer and send acceptance back.
-    pub async fn accept_request(&self, request_id: &str) -> Result<(), P2PError> {
+    /// Accept a pending pair request: verify PIN, add the remote peer,
+    /// and send acceptance back.
+    pub async fn accept_request(&self, request_id: &str, user_pin: &str) -> Result<(), P2PError> {
+        // Peek at the request to validate PIN before consuming it
+        {
+            let pending = self.pending_requests.read().await;
+            let request = pending.iter().find(|r| r.id == request_id).ok_or_else(|| {
+                P2PError::Config(format!("Pair request {} not found", request_id))
+            })?;
+
+            if request.pin != user_pin {
+                return Err(P2PError::Config("PIN does not match".to_string()));
+            }
+        }
+
         let request = self.take_request(request_id).await.ok_or_else(|| {
             P2PError::Config(format!("Pair request {} not found", request_id))
         })?;
@@ -233,14 +386,14 @@ impl PairServer {
             ))
         })?;
 
-        // Add the remote as a trusted peer
+        // Add the remote peer (untrusted by default)
         self.add_peer_from_info(&request.from).await?;
 
         // Send acceptance with our info
         let local_info = self.build_peer_info().await;
         let response = PairMessage::Response {
             accepted: true,
-            from: local_info,
+            from: Some(local_info),
         };
         write_message(&mut stream, &response).await?;
 
@@ -252,15 +405,15 @@ impl PairServer {
         Ok(())
     }
 
-    /// Reject a pending pair request.
+    /// Reject a pending pair request. Does NOT send local device info.
     pub async fn reject_request(&self, request_id: &str) -> Result<(), P2PError> {
         let request = self.take_request(request_id).await;
 
         if let Some(mut stream) = self.take_stream(request_id).await {
-            let local_info = self.build_peer_info().await;
+            // Send rejection without local info (prevent info leak)
             let response = PairMessage::Response {
                 accepted: false,
-                from: local_info,
+                from: None,
             };
             // Best-effort send — stream may already be closed
             let _ = write_message(&mut stream, &response).await;
@@ -297,21 +450,22 @@ impl PairServer {
         streams.remove(request_id)
     }
 
-    /// Convert a `PeerInfo` into a `PeerDevice` and add it to config as trusted.
+    /// Convert a `PeerInfo` into a `PeerDevice` and add it to config.
+    /// New peers are added as **untrusted** by default. Existing peers
+    /// keep their current trust level.
     async fn add_peer_from_info(&self, info: &PeerInfo) -> Result<(), P2PError> {
         let mut config = self.config.write().await;
 
-        // Don't add duplicate
+        // Don't add duplicate — update existing peer instead
         if config.peers.iter().any(|p| {
             p.id == info.device_id || p.ip_address == info.ip_address
         }) {
-            // Update existing peer to trusted
             if let Some(existing) = config
                 .peers
                 .iter_mut()
                 .find(|p| p.id == info.device_id || p.ip_address == info.ip_address)
             {
-                existing.is_trusted = true;
+                // Keep existing trust level — don't auto-trust
                 existing.status = DeviceStatus::Online;
                 existing.last_seen = Some(Utc::now());
             }
@@ -331,7 +485,7 @@ impl PairServer {
             ssh_user: String::new(), // User can fill in later via edit
             ssh_key_path: None,
             ssh_password: None,
-            is_trusted: true,
+            is_trusted: false, // Untrusted by default — user must manually trust
             tailscale_hostname: info.tailscale_hostname.clone(),
             flymode_version: info.flymode_version.clone(),
         };
@@ -395,6 +549,7 @@ pub async fn read_message(stream: &mut TcpStream) -> Result<PairMessage, P2PErro
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::p2p::DEFAULT_LISTEN_PORT;
 
     fn sample_peer_info() -> PeerInfo {
         PeerInfo {
@@ -402,7 +557,7 @@ mod tests {
             device_name: "TestDevice".to_string(),
             hostname: "testdevice.local".to_string(),
             ip_address: "100.64.0.1".to_string(),
-            listen_port: 4827,
+            listen_port: DEFAULT_LISTEN_PORT,
             tailscale_hostname: Some("testdevice.ts.net".to_string()),
             flymode_version: Some("0.3.0".to_string()),
         }
@@ -420,13 +575,15 @@ mod tests {
     fn test_pair_message_request_roundtrip() {
         let msg = PairMessage::Request {
             from: sample_peer_info(),
+            pin: "123456".to_string(),
         };
         let json = serde_json::to_vec(&msg).expect("serialize");
         let deserialized: PairMessage = serde_json::from_slice(&json).expect("deserialize");
         match deserialized {
-            PairMessage::Request { from } => {
+            PairMessage::Request { from, pin } => {
                 assert_eq!(from.device_id, "test-device-001");
                 assert_eq!(from.device_name, "TestDevice");
+                assert_eq!(pin, "123456");
             }
             _ => panic!("Expected Request"),
         }
@@ -436,29 +593,32 @@ mod tests {
     fn test_pair_message_response_roundtrip() {
         let msg = PairMessage::Response {
             accepted: true,
-            from: sample_peer_info(),
+            from: Some(sample_peer_info()),
         };
         let json = serde_json::to_vec(&msg).expect("serialize");
         let deserialized: PairMessage = serde_json::from_slice(&json).expect("deserialize");
         match deserialized {
             PairMessage::Response { accepted, from } => {
                 assert!(accepted);
-                assert_eq!(from.device_name, "TestDevice");
+                assert_eq!(from.unwrap().device_name, "TestDevice");
             }
             _ => panic!("Expected Response"),
         }
     }
 
     #[test]
-    fn test_pair_message_response_rejected() {
+    fn test_pair_message_response_rejected_no_info() {
         let msg = PairMessage::Response {
             accepted: false,
-            from: sample_peer_info(),
+            from: None,
         };
         let json = serde_json::to_vec(&msg).expect("serialize");
         let deserialized: PairMessage = serde_json::from_slice(&json).expect("deserialize");
         match deserialized {
-            PairMessage::Response { accepted, .. } => assert!(!accepted),
+            PairMessage::Response { accepted, from } => {
+                assert!(!accepted);
+                assert!(from.is_none());
+            }
             _ => panic!("Expected Response"),
         }
     }
@@ -468,12 +628,70 @@ mod tests {
         let request = PairRequest {
             id: "req-001".to_string(),
             from: sample_peer_info(),
+            pin: "654321".to_string(),
             received_at: Utc::now(),
         };
         let json = serde_json::to_string(&request).expect("serialize");
         let deserialized: PairRequest = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(deserialized.id, "req-001");
         assert_eq!(deserialized.from.device_name, "TestDevice");
+        assert_eq!(deserialized.pin, "654321");
+    }
+
+    #[test]
+    fn test_pair_result_serialization() {
+        let result = PairResult {
+            accepted: true,
+            pin: Some("123456".to_string()),
+        };
+        let json = serde_json::to_string(&result).expect("serialize");
+        let deserialized: PairResult = serde_json::from_str(&json).expect("deserialize");
+        assert!(deserialized.accepted);
+        assert_eq!(deserialized.pin, Some("123456".to_string()));
+    }
+
+    #[test]
+    fn test_validate_peer_info_valid() {
+        let info = sample_peer_info();
+        assert!(PairServer::validate_peer_info(&info));
+    }
+
+    #[test]
+    fn test_validate_peer_info_device_id_too_long() {
+        let mut info = sample_peer_info();
+        info.device_id = "x".repeat(MAX_DEVICE_ID_LEN + 1);
+        assert!(!PairServer::validate_peer_info(&info));
+    }
+
+    #[test]
+    fn test_validate_peer_info_device_name_too_long() {
+        let mut info = sample_peer_info();
+        info.device_name = "x".repeat(MAX_DEVICE_NAME_LEN + 1);
+        assert!(!PairServer::validate_peer_info(&info));
+    }
+
+    #[test]
+    fn test_validate_peer_info_hostname_too_long() {
+        let mut info = sample_peer_info();
+        info.hostname = "x".repeat(MAX_HOSTNAME_LEN + 1);
+        assert!(!PairServer::validate_peer_info(&info));
+    }
+
+    #[test]
+    fn test_validate_peer_info_ip_too_long() {
+        let mut info = sample_peer_info();
+        info.ip_address = "x".repeat(MAX_IP_ADDRESS_LEN + 1);
+        assert!(!PairServer::validate_peer_info(&info));
+    }
+
+    #[test]
+    fn test_pin_generation_range() {
+        // Verify PIN is always 6 digits
+        for _ in 0..100 {
+            let pin: u32 = rand::thread_rng().gen_range(100_000..999_999);
+            assert!(pin >= 100_000 && pin < 999_999);
+            assert_eq!(pin.to_string().len(), 6);
+        }
     }
 
     #[tokio::test]
@@ -483,6 +701,7 @@ mod tests {
 
         let msg = PairMessage::Request {
             from: sample_peer_info(),
+            pin: "999888".to_string(),
         };
         let msg_clone = msg.clone();
 
@@ -497,8 +716,9 @@ mod tests {
         writer.await.expect("writer task");
 
         match received {
-            PairMessage::Request { from } => {
+            PairMessage::Request { from, pin } => {
                 assert_eq!(from.device_id, "test-device-001");
+                assert_eq!(pin, "999888");
             }
             _ => panic!("Expected Request"),
         }
@@ -511,7 +731,7 @@ mod tests {
 
         let msg = PairMessage::Response {
             accepted: true,
-            from: sample_peer_info(),
+            from: Some(sample_peer_info()),
         };
         let msg_clone = msg.clone();
 
@@ -528,7 +748,7 @@ mod tests {
         match received {
             PairMessage::Response { accepted, from } => {
                 assert!(accepted);
-                assert_eq!(from.device_name, "TestDevice");
+                assert_eq!(from.unwrap().device_name, "TestDevice");
             }
             _ => panic!("Expected Response"),
         }
@@ -541,7 +761,7 @@ mod tests {
             device_name: "name".to_string(),
             hostname: "host".to_string(),
             ip_address: "1.2.3.4".to_string(),
-            listen_port: 4827,
+            listen_port: DEFAULT_LISTEN_PORT,
             tailscale_hostname: None,
             flymode_version: None,
         };
@@ -555,6 +775,7 @@ mod tests {
     fn test_wire_format_length_prefix() {
         let msg = PairMessage::Request {
             from: sample_peer_info(),
+            pin: "112233".to_string(),
         };
         let json = serde_json::to_vec(&msg).expect("serialize");
         let len = json.len() as u32;
@@ -571,8 +792,9 @@ mod tests {
         let parsed: PairMessage =
             serde_json::from_slice(&wire[4..]).expect("parse from wire");
         match parsed {
-            PairMessage::Request { from } => {
+            PairMessage::Request { from, pin } => {
                 assert_eq!(from.device_id, "test-device-001");
+                assert_eq!(pin, "112233");
             }
             _ => panic!("Expected Request"),
         }

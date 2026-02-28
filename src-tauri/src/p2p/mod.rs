@@ -1,5 +1,9 @@
 pub mod pair;
 
+/// Default TCP port for the pairing listener. Only used when creating
+/// a fresh `p2p.json` config — runtime always reads from the config file.
+pub const DEFAULT_LISTEN_PORT: u16 = 19131;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::io::Read;
@@ -102,7 +106,7 @@ impl Default for P2PConfig {
             device_name: hostname::get()
                 .map(|h| h.to_string_lossy().to_string())
                 .unwrap_or_else(|_| "Unknown".to_string()),
-            listen_port: 4827,
+            listen_port: DEFAULT_LISTEN_PORT,
             peers: Vec::new(),
             auto_discover_tailscale: true,
             sync_enabled: true,
@@ -734,7 +738,7 @@ mod tests {
 
         assert!(!config.device_id.is_empty());
         assert!(!config.device_name.is_empty());
-        assert_eq!(config.listen_port, 4827);
+        assert_eq!(config.listen_port, DEFAULT_LISTEN_PORT);
         assert!(config.peers.is_empty());
         assert!(config.auto_discover_tailscale);
         assert!(config.sync_enabled);

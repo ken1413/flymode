@@ -106,7 +106,13 @@ export interface PeerInfo {
 export interface PairRequest {
   id: string;
   from: PeerInfo;
+  pin: string;
   received_at: string;
+}
+
+export interface PairResult {
+  accepted: boolean;
+  pin: string | null;
 }
 
 export interface SyncState {

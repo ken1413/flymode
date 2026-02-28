@@ -202,16 +202,16 @@ FlyMode requires these ports:
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
-| 4827 | TCP | Device pairing requests |
+| 19131 | TCP | Device pairing requests (customizable in `~/.config/flymode/p2p.json`) |
 | 22 | TCP | SSH connections (sync, transfer, terminal) |
 
 ```bash
 # Ubuntu (ufw)
-sudo ufw allow 4827/tcp
+sudo ufw allow 19131/tcp
 sudo ufw allow 22/tcp
 
 # Fedora (firewalld)
-sudo firewall-cmd --permanent --add-port=4827/tcp
+sudo firewall-cmd --permanent --add-port=19131/tcp
 sudo firewall-cmd --permanent --add-service=ssh
 sudo firewall-cmd --reload
 ```
@@ -358,7 +358,7 @@ The top of the page shows local machine info:
 
 - **Device ID**: Unique identifier (UUID)
 - **Device Name**: Machine hostname
-- **Listen Port**: TCP pairing service port (default 4827)
+- **Listen Port**: TCP pairing service port (default 19131, customizable in `~/.config/flymode/p2p.json`)
 
 #### Adding a Device
 
@@ -397,7 +397,7 @@ Click "Discover Tailscale Peers" — FlyMode runs `tailscale status --json` to f
 
 #### TCP Pairing Protocol
 
-FlyMode has a built-in TCP pairing service (port 4827):
+FlyMode has a built-in TCP pairing service (default port 19131, configurable via `p2p.json`):
 
 1. **Machine A** clicks "Pair" > sends pairing request to Machine B
 2. **Machine B** receives it > displayed in "Incoming Pair Requests"
@@ -722,7 +722,7 @@ The bottom of the Settings page shows:
 │  └────────────────────────────────────────────────────────────┘ │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────────┐ │
-│  │         System Tray + Auto-Start + TCP Pairing (4827)     │ │
+│  │         System Tray + Auto-Start + TCP Pairing (19131)     │ │
 │  └──────────────────────────────────────────────────────────┘ │
 │                                                               │
 └─────────────────────────────────────────────────────────────┘
@@ -788,7 +788,7 @@ The bottom of the Settings page shows:
 {
   "device_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "device_name": "my-laptop",
-  "listen_port": 4827,
+  "listen_port": 19131,
   "peers": [
     {
       "id": "f9e8d7c6-b5a4-3210-fedc-ba0987654321",
@@ -864,7 +864,7 @@ All inter-device communication (sync, file transfer, terminal) goes through encr
 
 ### Network Security
 
-- FlyMode does not expose any external service ports (except TCP 4827 for pairing)
+- FlyMode does not expose any external service ports (except TCP 19131 for pairing, customizable in `p2p.json`)
 - SSH connections are always outbound (acting as a client)
 - Supports Tailscale private networks (WireGuard encryption)
 
@@ -892,7 +892,7 @@ All inter-device communication (sync, file transfer, terminal) goes through encr
 | Problem | Solution |
 |---------|----------|
 | Device shows Offline | 1. Verify SSH server is running on the peer<br>2. Verify IP is correct<br>3. Check firewall allows port 22<br>4. Test manually: `ssh user@ip` |
-| Pair request not received | 1. Check firewall allows port 4827<br>2. Ensure peer's FlyMode is running<br>3. Both on same network (or Tailscale) |
+| Pair request not received | 1. Check firewall allows the pairing port (default 19131, see `p2p.json`)<br>2. Ensure peer's FlyMode is running<br>3. Both on same network (or Tailscale) |
 | Tailscale can't find devices | 1. Run `tailscale status` to verify both are online<br>2. Ensure both logged into the same Tailscale account |
 | SSH connection fails | 1. Verify correct username<br>2. Verify correct key path or password<br>3. Debug: `ssh -v user@ip` |
 

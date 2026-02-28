@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { PeerDevice, P2PConfig, DeviceStatus, ConnectionType, PairRequest } from '../App';
+import type { PeerDevice, P2PConfig, DeviceStatus, ConnectionType, PairRequest, PairResult } from '../App';
 import { toast } from './Toast';
 import { TerminalModal } from './TerminalModal';
 
@@ -25,6 +25,8 @@ export function P2PTab() {
   const [peerStatuses, setPeerStatuses] = useState<Map<string, DeviceStatus>>(new Map());
   const [pairRequests, setPairRequests] = useState<PairRequest[]>([]);
   const [pairingIp, setPairingIp] = useState<string | null>(null);
+  const [pairingPin, setPairingPin] = useState<string | null>(null);
+  const [pinInputs, setPinInputs] = useState<Record<string, string>>({});
   const [openclawPeers, setOpenclawPeers] = useState<Set<string>>(new Set());
   const [localPeer, setLocalPeer] = useState<PeerDevice | null>(null);
   const [localPasswordPrompt, setLocalPasswordPrompt] = useState(false);
@@ -171,15 +173,21 @@ export function P2PTab() {
 
   const pairWithPeer = async (peer: PeerDevice) => {
     setPairingIp(peer.ip_address);
+    setPairingPin(null);
+
+    // Listen for the PIN event emitted by the backend
+    const unlisten = await listen<string>('pair-pin-generated', (event) => {
+      setPairingPin(event.payload);
+    });
+
     try {
-      const accepted = await invoke<boolean>('pair_with_peer', {
+      const result = await invoke<PairResult>('pair_with_peer', {
         ip: peer.ip_address,
-        port: config?.listen_port || 4827,
+        port: config!.listen_port,
       });
-      if (accepted) {
-        toast.success(`Paired with ${peer.name}!`);
+      if (result.accepted) {
+        toast.success(`Paired with ${peer.name} (untrusted — trust manually)`);
         await loadConfig();
-        // Remove from discovered list
         setDiscoveredPeers(prev => prev.filter(p => p.ip_address !== peer.ip_address));
       } else {
         toast.info(`${peer.name} declined the pair request`);
@@ -187,14 +195,26 @@ export function P2PTab() {
     } catch (e) {
       toast.error('Pair failed: ' + e);
     } finally {
+      unlisten();
       setPairingIp(null);
+      setPairingPin(null);
     }
   };
 
   const acceptPairRequest = async (requestId: string) => {
+    const userPin = pinInputs[requestId] || '';
+    if (userPin.length !== 6) {
+      toast.error('Please enter the 6-digit PIN shown on the other device');
+      return;
+    }
     try {
-      await invoke('accept_pair_request', { requestId });
-      toast.success('Pair request accepted!');
+      await invoke('accept_pair_request', { requestId, pin: userPin });
+      toast.success('Pair request accepted (untrusted — trust manually)');
+      setPinInputs(prev => {
+        const next = { ...prev };
+        delete next[requestId];
+        return next;
+      });
       await loadConfig();
       await loadPairRequests();
     } catch (e) {
@@ -355,7 +375,7 @@ export function P2PTab() {
             <span class="card-title">Incoming Pair Requests ({pairRequests.length})</span>
           </div>
           {pairRequests.map(req => (
-            <div class="peer-item" key={req.id}>
+            <div class="peer-item" key={req.id} style={{ flexWrap: 'wrap' }}>
               <div class="peer-status" style={{ backgroundColor: 'var(--primary)' }} />
               <div class="peer-info">
                 <div class="peer-name">{req.from.device_name}</div>
@@ -365,8 +385,27 @@ export function P2PTab() {
                   {' • '}{formatTime(req.received_at)}
                 </div>
               </div>
-              <div class="peer-actions">
-                <button class="btn btn-primary btn-sm" onClick={() => acceptPairRequest(req.id)}>
+              <div class="peer-actions" style={{ alignItems: 'center', gap: '6px' }}>
+                <input
+                  type="text"
+                  class="form-control"
+                  style={{ width: '90px', textAlign: 'center', letterSpacing: '2px', fontFamily: 'monospace', fontSize: '16px' }}
+                  placeholder="PIN"
+                  maxLength={6}
+                  value={pinInputs[req.id] || ''}
+                  onInput={e => {
+                    const val = e.currentTarget.value.replace(/\D/g, '').slice(0, 6);
+                    setPinInputs(prev => ({ ...prev, [req.id]: val }));
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') acceptPairRequest(req.id);
+                  }}
+                />
+                <button
+                  class="btn btn-primary btn-sm"
+                  onClick={() => acceptPairRequest(req.id)}
+                  disabled={(pinInputs[req.id] || '').length !== 6}
+                >
                   Accept
                 </button>
                 <button class="btn btn-danger btn-sm" onClick={() => rejectPairRequest(req.id)}>
@@ -508,6 +547,25 @@ export function P2PTab() {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {pairingPin && (
+        <div class="card" style={{ borderColor: 'var(--primary)', borderWidth: '2px', textAlign: 'center' }}>
+          <div class="card-header">
+            <span class="card-title">Pairing in progress...</span>
+          </div>
+          <div style={{ padding: '16px' }}>
+            <p style={{ marginBottom: '8px', color: 'var(--text-muted)' }}>
+              Enter this PIN on the other device:
+            </p>
+            <div style={{ fontSize: '36px', fontFamily: 'monospace', fontWeight: 'bold', letterSpacing: '8px', color: 'var(--primary)' }}>
+              {pairingPin}
+            </div>
+            <p style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
+              Waiting for response...
+            </p>
+          </div>
         </div>
       )}
 
