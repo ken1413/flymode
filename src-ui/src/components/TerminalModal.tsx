@@ -253,19 +253,39 @@ export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalM
         term.writeln(`\r\nConnection failed: ${e}`);
         toast.error(`Terminal connection failed: ${e}`);
 
-        setSessions(prev => {
-          const next = new Map(prev);
-          next.set(peer.id, {
-            peer,
-            sessionId: null,
-            terminal: term,
-            fitAddon,
-            status: 'error',
-            pasteHandler,
-            resizeObserver,
+        // If localhost failed, clear cached password so user can re-enter
+        if (peer.id === '__local__') {
+          if (pasteHandler) containerEl.removeEventListener('keydown', pasteHandler);
+          if (resizeObserver) resizeObserver.disconnect();
+          term.dispose();
+          setPeersWithCreds(prev => {
+            const next = new Map(prev);
+            next.delete('__local__');
+            return next;
           });
-          return next;
-        });
+          setSessions(prev => {
+            const next = new Map(prev);
+            next.delete(peer.id);
+            return next;
+          });
+          // Auto re-prompt
+          setPasswordInput('');
+          setPasswordPrompt(peer);
+        } else {
+          setSessions(prev => {
+            const next = new Map(prev);
+            next.set(peer.id, {
+              peer,
+              sessionId: null,
+              terminal: term,
+              fitAddon,
+              status: 'error',
+              pasteHandler,
+              resizeObserver,
+            });
+            return next;
+          });
+        }
       });
   }, []);
 
