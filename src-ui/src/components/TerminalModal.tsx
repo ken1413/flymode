@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'preact/hooks';
+import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -8,76 +8,127 @@ import type { PeerDevice } from '../App';
 import { toast } from './Toast';
 
 interface TerminalModalProps {
-  peer: PeerDevice;
+  openclawPeers: PeerDevice[];
+  initialPeer: PeerDevice;
   onClose: () => void;
 }
 
-export function TerminalModal({ peer, onClose }: TerminalModalProps) {
-  const termRef = useRef<HTMLDivElement>(null);
-  const terminalRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const sessionIdRef = useRef<string | null>(null);
+type SessionStatus = 'idle' | 'connecting' | 'connected' | 'error';
+
+interface TermSession {
+  peer: PeerDevice;
+  sessionId: string | null;
+  terminal: Terminal | null;
+  fitAddon: FitAddon | null;
+  status: SessionStatus;
+  pasteHandler: ((ev: KeyboardEvent) => void) | null;
+  resizeObserver: ResizeObserver | null;
+}
+
+const TERM_OPTIONS = {
+  cursorBlink: true,
+  cursorStyle: 'block' as const,
+  cursorInactiveStyle: 'outline' as const,
+  fontSize: 14,
+  fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+  theme: {
+    background: '#0f172a',
+    foreground: '#f1f5f9',
+    cursor: '#3b82f6',
+    cursorAccent: '#0f172a',
+    selectionBackground: '#334155',
+    selectionInactiveBackground: '#1e293b',
+    black: '#0f172a',
+    red: '#ef4444',
+    green: '#22c55e',
+    yellow: '#eab308',
+    blue: '#3b82f6',
+    magenta: '#a855f7',
+    cyan: '#06b6d4',
+    white: '#f1f5f9',
+    brightBlack: '#334155',
+    brightRed: '#f87171',
+    brightGreen: '#4ade80',
+    brightYellow: '#facc15',
+    brightBlue: '#60a5fa',
+    brightMagenta: '#c084fc',
+    brightCyan: '#22d3ee',
+    brightWhite: '#ffffff',
+  },
+};
+
+export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalModalProps) {
+  const [sessions, setSessions] = useState<Map<string, TermSession>>(new Map());
+  const [activePeerId, setActivePeerId] = useState<string>(initialPeer.id);
+  const sessionsRef = useRef<Map<string, TermSession>>(new Map());
   const closingRef = useRef(false);
+  const containerRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-  const cleanup = useCallback(async () => {
-    if (closingRef.current) return;
-    closingRef.current = true;
+  // Keep ref in sync with state
+  sessionsRef.current = sessions;
 
-    if (sessionIdRef.current) {
+  const cleanupSession = useCallback(async (peerId: string) => {
+    const session = sessionsRef.current.get(peerId);
+    if (!session) return;
+
+    if (session.sessionId) {
       try {
-        await invoke('close_terminal', { sessionId: sessionIdRef.current });
+        await invoke('close_terminal', { sessionId: session.sessionId });
       } catch {
         // Session may already be closed
       }
-      sessionIdRef.current = null;
     }
-    if (terminalRef.current) {
-      terminalRef.current.dispose();
-      terminalRef.current = null;
+    if (session.pasteHandler) {
+      const container = containerRefs.current.get(peerId);
+      container?.removeEventListener('keydown', session.pasteHandler);
+    }
+    if (session.resizeObserver) {
+      session.resizeObserver.disconnect();
+    }
+    if (session.terminal) {
+      session.terminal.dispose();
     }
   }, []);
 
-  useEffect(() => {
-    if (!termRef.current) return;
+  const cleanupAll = useCallback(async () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
 
-    const term = new Terminal({
-      cursorBlink: true,
-      cursorStyle: 'block',
-      cursorInactiveStyle: 'outline',
-      fontSize: 14,
-      fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-      theme: {
-        background: '#0f172a',
-        foreground: '#f1f5f9',
-        cursor: '#3b82f6',
-        cursorAccent: '#0f172a',
-        selectionBackground: '#334155',
-        selectionInactiveBackground: '#1e293b',
-        black: '#0f172a',
-        red: '#ef4444',
-        green: '#22c55e',
-        yellow: '#eab308',
-        blue: '#3b82f6',
-        magenta: '#a855f7',
-        cyan: '#06b6d4',
-        white: '#f1f5f9',
-        brightBlack: '#334155',
-        brightRed: '#f87171',
-        brightGreen: '#4ade80',
-        brightYellow: '#facc15',
-        brightBlue: '#60a5fa',
-        brightMagenta: '#c084fc',
-        brightCyan: '#22d3ee',
-        brightWhite: '#ffffff',
-      },
+    const promises: Promise<void>[] = [];
+    for (const peerId of sessionsRef.current.keys()) {
+      promises.push(cleanupSession(peerId));
+    }
+    await Promise.all(promises);
+  }, [cleanupSession]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => { cleanupAll(); };
+  }, [cleanupAll]);
+
+  const connectPeer = useCallback((peer: PeerDevice, containerEl: HTMLDivElement) => {
+    // Mark connecting
+    setSessions(prev => {
+      const next = new Map(prev);
+      next.set(peer.id, {
+        peer,
+        sessionId: null,
+        terminal: null,
+        fitAddon: null,
+        status: 'connecting',
+        pasteHandler: null,
+        resizeObserver: null,
+      });
+      return next;
     });
 
+    const term = new Terminal(TERM_OPTIONS);
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
-    term.open(termRef.current);
+    term.open(containerEl);
     fitAddon.fit();
 
-    // Try WebGL renderer — canvas renderer has cursor/selection issues in WebKitGTK
+    // Try WebGL renderer
     try {
       const webglAddon = new WebglAddon();
       term.loadAddon(webglAddon);
@@ -85,12 +136,9 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
       console.warn('WebGL renderer not available, using default canvas renderer');
     }
 
-    // Force cursor options after open — v6 beta may not apply constructor options
+    // Force cursor options after open
     term.options.cursorStyle = 'block';
     term.options.cursorBlink = true;
-
-    terminalRef.current = term;
-    fitAddonRef.current = fitAddon;
 
     term.writeln(`Connecting to ${peer.name} (${peer.ip_address})...`);
 
@@ -103,22 +151,37 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
     const cols = term.cols;
     const rows = term.rows;
 
-    // Open terminal session
-    invoke<string>('open_terminal', {
-      peer,
-      cols,
-      rows,
-      onData,
-    })
-      .then((sid) => {
-        sessionIdRef.current = sid;
-        // Defer focus to next frame — DOM must be fully laid out for cursor to render
-        requestAnimationFrame(() => term.focus());
+    // Paste handler
+    const pasteHandler = (ev: KeyboardEvent) => {
+      if (ev.ctrlKey && ev.shiftKey && ev.key === 'V') {
+        ev.preventDefault();
+        const currentSession = sessionsRef.current.get(peer.id);
+        navigator.clipboard.readText().then((text) => {
+          if (text && currentSession?.sessionId) {
+            const encoded = new TextEncoder().encode(text);
+            invoke('send_terminal_input', {
+              sessionId: currentSession.sessionId,
+              data: Array.from(encoded),
+            }).catch(() => {});
+          }
+        });
+      }
+    };
+    containerEl.addEventListener('keydown', pasteHandler);
 
-        // Forward all keystrokes (including IME composed text) to backend.
-        // Deduplicate: WebKitGTK IME can fire onData twice for the same
-        // composed text (especially the first character). Skip if identical
-        // data arrives within 50ms — too fast for any human input.
+    // ResizeObserver
+    const resizeObserver = new ResizeObserver(() => {
+      // Only fit if this is the active terminal
+      const currentActive = sessionsRef.current.get(peer.id);
+      if (currentActive?.fitAddon) {
+        currentActive.fitAddon.fit();
+      }
+    });
+    resizeObserver.observe(containerEl);
+
+    invoke<string>('open_terminal', { peer, cols, rows, onData })
+      .then((sid) => {
+        // Wire input with dedup
         let lastSentData = '';
         let lastSentTime = 0;
         term.onData((data: string) => {
@@ -126,28 +189,25 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
           if (data === lastSentData && now - lastSentTime < 50) return;
           lastSentData = data;
           lastSentTime = now;
-          if (sessionIdRef.current) {
+          const currentSession = sessionsRef.current.get(peer.id);
+          if (currentSession?.sessionId) {
             const encoded = new TextEncoder().encode(data);
             invoke('send_terminal_input', {
-              sessionId: sessionIdRef.current,
+              sessionId: currentSession.sessionId,
               data: Array.from(encoded),
-            }).catch(() => {
-              // Session may have closed
-            });
+            }).catch(() => {});
           }
         });
 
-        // Clear textarea after each composition to prevent text accumulation.
-        // In WebKitGTK, backspace sends \x7f to remote but doesn't clear
-        // the textarea, so old composed text replays on next composition.
-        const xtermTextarea = termRef.current?.querySelector('textarea') as HTMLTextAreaElement | null;
+        // Clear textarea after composition (IME fix)
+        const xtermTextarea = containerEl.querySelector('textarea') as HTMLTextAreaElement | null;
         if (xtermTextarea) {
           xtermTextarea.addEventListener('compositionend', () => {
             setTimeout(() => { xtermTextarea.value = ''; }, 50);
           });
         }
 
-        // Clipboard: copy on selection, Ctrl+Shift+V to paste
+        // Copy on selection
         term.onSelectionChange(() => {
           const sel = term.getSelection();
           if (sel) navigator.clipboard.writeText(sel).catch(() => {});
@@ -155,77 +215,177 @@ export function TerminalModal({ peer, onClose }: TerminalModalProps) {
 
         // Forward resize events
         term.onResize(({ cols, rows }: { cols: number; rows: number }) => {
-          if (sessionIdRef.current) {
+          const currentSession = sessionsRef.current.get(peer.id);
+          if (currentSession?.sessionId) {
             invoke('resize_terminal', {
-              sessionId: sessionIdRef.current,
+              sessionId: currentSession.sessionId,
               cols,
               rows,
             }).catch(() => {});
           }
         });
+
+        // Update session with connected state
+        setSessions(prev => {
+          const next = new Map(prev);
+          next.set(peer.id, {
+            peer,
+            sessionId: sid,
+            terminal: term,
+            fitAddon,
+            status: 'connected',
+            pasteHandler,
+            resizeObserver,
+          });
+          return next;
+        });
+
+        requestAnimationFrame(() => term.focus());
       })
       .catch((e) => {
         term.writeln(`\r\nConnection failed: ${e}`);
         toast.error(`Terminal connection failed: ${e}`);
-      });
 
-    // Ctrl+Shift+V paste — listen on container to avoid attachCustomKeyEventHandler
-    // which interferes with xterm.js internals (IME, selection)
-    const pasteHandler = (ev: KeyboardEvent) => {
-      if (ev.ctrlKey && ev.shiftKey && ev.key === 'V') {
-        ev.preventDefault();
-        navigator.clipboard.readText().then((text) => {
-          if (text && sessionIdRef.current) {
-            const encoded = new TextEncoder().encode(text);
-            invoke('send_terminal_input', {
-              sessionId: sessionIdRef.current,
-              data: Array.from(encoded),
-            }).catch(() => {});
-          }
+        setSessions(prev => {
+          const next = new Map(prev);
+          next.set(peer.id, {
+            peer,
+            sessionId: null,
+            terminal: term,
+            fitAddon,
+            status: 'error',
+            pasteHandler,
+            resizeObserver,
+          });
+          return next;
         });
-      }
-    };
-    termRef.current.addEventListener('keydown', pasteHandler);
+      });
+  }, []);
 
-    // ResizeObserver for container size changes
-    const observer = new ResizeObserver(() => {
-      if (fitAddonRef.current) {
-        fitAddonRef.current.fit();
+  // Connect initial peer on mount
+  const initialConnectedRef = useRef(false);
+  useEffect(() => {
+    if (initialConnectedRef.current) return;
+    const container = containerRefs.current.get(initialPeer.id);
+    if (container) {
+      initialConnectedRef.current = true;
+      connectPeer(initialPeer, container);
+    }
+  }, [initialPeer, connectPeer]);
+
+  const handleDeviceClick = useCallback((peer: PeerDevice) => {
+    const session = sessionsRef.current.get(peer.id);
+    if (session && (session.status === 'connected' || session.status === 'connecting' || session.status === 'error')) {
+      // Just switch display
+      setActivePeerId(peer.id);
+      // Fit and focus active terminal
+      requestAnimationFrame(() => {
+        const s = sessionsRef.current.get(peer.id);
+        if (s?.fitAddon) s.fitAddon.fit();
+        if (s?.terminal) s.terminal.focus();
+      });
+    } else {
+      // Need to connect — set active first so container renders
+      setActivePeerId(peer.id);
+    }
+  }, []);
+
+  // When activePeerId changes and there's no session, connect once container mounts
+  useEffect(() => {
+    const session = sessionsRef.current.get(activePeerId);
+    if (session) return; // already exists
+
+    const peer = openclawPeers.find(p => p.id === activePeerId);
+    if (!peer) return;
+
+    // Wait for container ref via requestAnimationFrame
+    requestAnimationFrame(() => {
+      const container = containerRefs.current.get(activePeerId);
+      if (container && !sessionsRef.current.has(activePeerId)) {
+        connectPeer(peer, container);
       }
     });
-    observer.observe(termRef.current);
+  }, [activePeerId, openclawPeers, connectPeer]);
 
-    return () => {
-      termRef.current?.removeEventListener('keydown', pasteHandler);
-      observer.disconnect();
-      cleanup();
+  // Fit active terminal on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      const session = sessionsRef.current.get(activePeerId);
+      if (session?.fitAddon) {
+        session.fitAddon.fit();
+      }
     };
-  }, [peer, cleanup]);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [activePeerId]);
 
   const handleOverlayClick = (e: MouseEvent) => {
     if ((e.target as HTMLElement).classList.contains('terminal-overlay')) {
-      cleanup();
+      cleanupAll();
       onClose();
     }
   };
 
   const handleClose = () => {
-    cleanup();
+    cleanupAll();
     onClose();
   };
+
+  const getStatusDotClass = (peerId: string): string => {
+    const session = sessions.get(peerId);
+    if (!session) return 'off';
+    switch (session.status) {
+      case 'connected': return 'on';
+      case 'connecting': return 'connecting';
+      case 'error': return 'error';
+      default: return 'off';
+    }
+  };
+
+  // Build the set of peer IDs that need container divs (active + already-connected)
+  const renderedPeerIds = new Set<string>();
+  renderedPeerIds.add(activePeerId);
+  for (const [peerId, session] of sessions) {
+    if (session.status === 'connected' || session.status === 'connecting' || session.status === 'error') {
+      renderedPeerIds.add(peerId);
+    }
+  }
 
   return (
     <div class="terminal-overlay" onClick={handleOverlayClick}>
       <div class="terminal-modal" onClick={(e) => e.stopPropagation()}>
         <div class="terminal-header">
-          <span class="terminal-title">
-            {peer.name} ({peer.ip_address})
-          </span>
-          <button class="modal-close" onClick={handleClose}>
-            x
-          </button>
+          <span class="terminal-title">OpenClaw Terminal</span>
+          <button class="modal-close" onClick={handleClose}>x</button>
         </div>
-        <div class="terminal-container" ref={termRef} />
+
+        {openclawPeers.length > 1 && (
+          <div class="terminal-devices">
+            {openclawPeers.map(peer => (
+              <button
+                key={peer.id}
+                class={`terminal-device-tab ${activePeerId === peer.id ? 'active' : ''}`}
+                onClick={() => handleDeviceClick(peer)}
+              >
+                <span class={`device-dot ${getStatusDotClass(peer.id)}`} />
+                {peer.name || peer.hostname}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div class="terminal-body">
+          {Array.from(renderedPeerIds).map(peerId => (
+            <div
+              key={peerId}
+              class="terminal-container"
+              ref={(el: HTMLDivElement | null) => {
+                if (el) containerRefs.current.set(peerId, el);
+              }}
+              style={{ display: activePeerId === peerId ? 'block' : 'none' }}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );

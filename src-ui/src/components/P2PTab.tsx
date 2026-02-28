@@ -26,7 +26,8 @@ export function P2PTab() {
   const [pairRequests, setPairRequests] = useState<PairRequest[]>([]);
   const [pairingIp, setPairingIp] = useState<string | null>(null);
   const [openclawPeers, setOpenclawPeers] = useState<Set<string>>(new Set());
-  const [terminalPeer, setTerminalPeer] = useState<PeerDevice | null>(null);
+  const [showTerminal, setShowTerminal] = useState(false);
+  const [initialTerminalPeer, setInitialTerminalPeer] = useState<PeerDevice | null>(null);
   const [form, setForm] = useState<PeerFormData>({
     name: '',
     hostname: '',
@@ -410,7 +411,10 @@ export function P2PTab() {
                 {openclawPeers.has(peer.id) && (
                   <button
                     class="btn-terminal"
-                    onClick={() => setTerminalPeer(peer)}
+                    onClick={() => {
+                      setInitialTerminalPeer(peer);
+                      setShowTerminal(true);
+                    }}
                     title="Open OpenClaw Terminal"
                   >
                     {'>_'}
@@ -458,10 +462,14 @@ export function P2PTab() {
         </div>
       )}
 
-      {terminalPeer && (
+      {showTerminal && initialTerminalPeer && (
         <TerminalModal
-          peer={terminalPeer}
-          onClose={() => setTerminalPeer(null)}
+          openclawPeers={config.peers.filter(p => openclawPeers.has(p.id))}
+          initialPeer={initialTerminalPeer}
+          onClose={() => {
+            setShowTerminal(false);
+            setInitialTerminalPeer(null);
+          }}
         />
       )}
 

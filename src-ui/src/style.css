@@ -1018,8 +1018,78 @@ input[type="checkbox"] {
   color: var(--text);
 }
 
-.terminal-container {
+.terminal-devices {
+  display: flex;
+  gap: 2px;
+  padding: 4px 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.terminal-device-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.terminal-device-tab:hover {
+  background: var(--bg-card);
+  color: var(--text);
+}
+
+.terminal-device-tab.active {
+  background: var(--bg-card);
+  color: var(--text);
+  border-color: var(--primary);
+}
+
+.device-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.device-dot.on {
+  background: var(--success);
+}
+
+.device-dot.off {
+  background: var(--text-muted);
+}
+
+.device-dot.connecting {
+  background: var(--primary);
+  animation: pulse 1.5s infinite;
+}
+
+.device-dot.error {
+  background: var(--danger);
+}
+
+.terminal-body {
   flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.terminal-body .terminal-container {
+  position: absolute;
+  inset: 0;
+}
+
+.terminal-container {
   padding: 4px;
   overflow: hidden;
   /* WebKitGTK requires -webkit- prefix for xterm.js selection to work */

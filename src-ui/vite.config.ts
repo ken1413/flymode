@@ -1,8 +1,15 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
 
 export default defineConfig({
   plugins: [preact()],
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test-setup.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
+  },
   clearScreen: false,
   server: {
     port: 5173,
