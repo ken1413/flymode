@@ -2,7 +2,7 @@
 
 Cross-platform desktop app — Wireless Scheduling + P2P Device Sync + Sticky Notes + File Transfer + Remote Terminal
 
-Version: v0.2.0 | Last updated: 2026-03-01
+Version: v0.3.0 | Last updated: 2026-03-01
 
 ---
 
@@ -688,7 +688,7 @@ When "Minimize to Tray" is enabled:
 #### Version Info
 
 The bottom of the Settings page shows:
-- App version (e.g., v0.2.0)
+- App version (e.g., v0.3.0)
 - Git commit hash
 
 ---
@@ -697,7 +697,7 @@ The bottom of the Settings page shows:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                       FlyMode v0.2.0                         │
+│                       FlyMode v0.3.0                         │
 ├─────────────────────────────────────────────────────────────┤
 │                                                               │
 │  ┌────────────── Frontend (Preact + TypeScript) ────────────┐ │
@@ -804,7 +804,7 @@ The bottom of the Settings page shows:
       "ssh_password": null,
       "is_trusted": true,
       "tailscale_hostname": "my-desktop",
-      "flymode_version": "0.2.0"
+      "flymode_version": "0.3.0"
     }
   ],
   "auto_discover_tailscale": true,
@@ -1087,4 +1087,4 @@ All inter-device communication (sync, file transfer, terminal) goes through encr
 ---
 
 *Last updated: 2026-03-01*
-*Version: v0.2.0*
+*Version: v0.3.0*

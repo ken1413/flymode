@@ -404,7 +404,7 @@ mod tests {
             ip_address: "100.64.0.1".to_string(),
             listen_port: 4827,
             tailscale_hostname: Some("testdevice.ts.net".to_string()),
-            flymode_version: Some("0.2.0".to_string()),
+            flymode_version: Some("0.3.0".to_string()),
         }
     }
 

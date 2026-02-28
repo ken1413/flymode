@@ -65,7 +65,7 @@ pub fn create_test_peer(name: &str, ip: &str) -> crate::p2p::PeerDevice {
         ssh_password: Some("testpass".to_string()),
         is_trusted: true,
         tailscale_hostname: None,
-        flymode_version: Some("0.2.0".to_string()),
+        flymode_version: Some("0.3.0".to_string()),
     }
 }
 

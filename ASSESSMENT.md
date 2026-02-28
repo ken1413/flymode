@@ -1,4 +1,4 @@
-# FlyMode v0.2.0 — 全面分析評估報告
+# FlyMode v0.3.0 — 全面分析評估報告
 
 **分析日期：** 2026-02-27
 **分析範圍：** 全部 Rust 後端、Preact 前端、建置配置、技術文件
@@ -195,9 +195,9 @@ await invoke('create_note', { title: form.title, content: form.content });
 
 | 檔案 | 版本 |
 |------|------|
-| `src-tauri/Cargo.toml` | `0.2.0` |
+| `src-tauri/Cargo.toml` | `0.3.0` |
 | `src-tauri/tauri.conf.json` | `0.1.0` |
-| `src-ui/package.json` | `0.2.0` |
+| `src-ui/package.json` | `0.3.0` |
 
 `tauri.conf.json` 的版本落後，會導致打包產出的版本資訊錯誤。
 
