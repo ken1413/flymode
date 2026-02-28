@@ -180,7 +180,8 @@ install_tauri_cli() {
 clone_repo() {
     if [ -d "$INSTALL_DIR/.git" ]; then
         info "Updating existing repo..."
-        git -C "$INSTALL_DIR" pull --ff-only
+        git -C "$INSTALL_DIR" fetch origin
+        git -C "$INSTALL_DIR" reset --hard origin/main
     elif [ -d "$INSTALL_DIR" ]; then
         info "Directory exists but is not a git repo, cloning fresh..."
         rm -rf "$INSTALL_DIR"
