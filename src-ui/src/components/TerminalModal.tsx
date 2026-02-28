@@ -334,6 +334,9 @@ export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalM
 
   // When activePeerId changes and there's no session, connect once container mounts
   useEffect(() => {
+    // Don't auto-connect while password prompt is showing
+    if (passwordPrompt) return;
+
     const session = sessionsRef.current.get(activePeerId);
     if (session) return; // already exists
 
@@ -351,7 +354,7 @@ export function TerminalModal({ openclawPeers, initialPeer, onClose }: TerminalM
         connectPeer(resolved, container);
       }
     });
-  }, [activePeerId, openclawPeers, connectPeer, peersWithCreds]);
+  }, [activePeerId, openclawPeers, connectPeer, peersWithCreds, passwordPrompt]);
 
   // Fit active terminal on window resize
   useEffect(() => {
