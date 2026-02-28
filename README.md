@@ -27,12 +27,20 @@ FlyMode 深度整合 OpenClaw — 自動偵測遠端裝置上的 OpenClaw Gatewa
 | **快速操作** | 即時切換 WiFi / 藍牙 / 飛航模式、執行自定義命令 |
 | **系統安全** | 系統密碼鎖定、系統匣背景執行、開機自動啟動 |
 
-## 一鍵安裝
+## 安裝
 
-在 Linux (Ubuntu/Fedora/Arch) 或 macOS 上執行：
+### 一般使用者（推薦）
+
+下載預編譯套件，不需要 Rust/Node 環境：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/install.sh | bash
+```
+
+或使用 AppImage（免 sudo）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/install.sh | bash -s -- --appimage
 ```
 
 安裝完成後執行：
@@ -41,11 +49,19 @@ curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/setup.sh | bas
 flymode
 ```
 
-> **注意：** 安裝過程中會自動安裝 GitHub CLI (`gh`) 並提示登入 GitHub 帳號。
+### 從原始碼建置（開發者）
+
+需要 Rust 1.70+、Node.js 18+ 環境：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/setup.sh | bash
+```
+
+> **注意：** 從原始碼建置需要安裝 GitHub CLI (`gh`) 並登入 GitHub 帳號。
 
 ## 安裝後必要設定
 
-安裝程式只處理編譯和安裝。要使用 P2P 功能，還需要：
+要使用 P2P 功能，還需要：
 
 1. **SSH Server** — 兩台電腦都需要安裝（安裝腳本會自動處理）
 2. **Tailscale**（建議）— 在兩台電腦上安裝並登入同一帳號，即可自動發現裝置
@@ -53,34 +69,13 @@ flymode
 
 詳細設定請參閱：[DOCUMENTATION.md](./DOCUMENTATION.md)
 
-## 手動安裝
-
-### 系統需求
-
-- Rust 1.70+、Node.js 18+
-- Linux: GTK3, WebKit2GTK 4.1, OpenSSL
-
-```bash
-# Linux (Ubuntu/Debian) 系統依賴
-sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev \
-    libayatana-appindicator3-dev librsvg2-dev patchelf \
-    libssl-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
-
-# Clone & Build
-git clone https://github.com/ken1413/flymode.git
-cd flymode/src-ui && npm install && cd ..
-cargo tauri build
-
-# 安裝 binary
-cp target/release/flymode ~/.local/bin/
-```
-
 ## 開發
 
 ```bash
 cd src-ui && npm install && cd ..   # 安裝前端依賴
 cargo tauri dev                      # 開發模式（hot reload）
 cd src-tauri && cargo test           # 執行測試
+./bump-version.sh minor              # 版本升級
 ```
 
 ## 文件

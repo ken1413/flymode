@@ -26,12 +26,20 @@ FlyMode provides deep integration with OpenClaw — automatically detects OpenCl
 | **Quick Actions** | Instant WiFi / Bluetooth / Airplane Mode toggle, run custom commands |
 | **Security** | System password lock, system tray background mode, auto-start on boot |
 
-## Quick Install
+## Install
 
-On Linux (Ubuntu/Fedora/Arch) or macOS:
+### End Users (Recommended)
+
+Download a pre-built package — no Rust/Node required:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/install.sh | bash
+```
+
+Or use AppImage (no sudo needed):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/install.sh | bash -s -- --appimage
 ```
 
 Then run:
@@ -40,9 +48,19 @@ Then run:
 flymode
 ```
 
+### Build from Source (Developers)
+
+Requires Rust 1.70+ and Node.js 18+:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/setup.sh | bash
+```
+
+> **Note:** Building from source requires GitHub CLI (`gh`) authentication.
+
 ## Post-Install Setup
 
-The installer only handles compilation and installation. For P2P features, you also need:
+For P2P features, you also need:
 
 1. **SSH Server** — required on both machines (the installer handles this automatically)
 2. **Tailscale** (recommended) — install on both machines and log in with the same account for auto-discovery
@@ -50,34 +68,13 @@ The installer only handles compilation and installation. For P2P features, you a
 
 See [DOCUMENTATION.en.md](./DOCUMENTATION.en.md) for detailed setup instructions.
 
-## Manual Install
-
-### Requirements
-
-- Rust 1.70+, Node.js 18+
-- Linux: GTK3, WebKit2GTK 4.1, OpenSSL
-
-```bash
-# Linux (Ubuntu/Debian) system dependencies
-sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev \
-    libayatana-appindicator3-dev librsvg2-dev patchelf \
-    libssl-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
-
-# Clone & Build
-git clone https://github.com/ken1413/flymode.git
-cd flymode/src-ui && npm install && cd ..
-cargo tauri build
-
-# Install binary
-cp target/release/flymode ~/.local/bin/
-```
-
 ## Development
 
 ```bash
 cd src-ui && npm install && cd ..   # Install frontend dependencies
 cargo tauri dev                      # Dev mode (hot reload)
 cd src-tauri && cargo test           # Run tests
+./bump-version.sh minor              # Bump version
 ```
 
 ## Documentation
