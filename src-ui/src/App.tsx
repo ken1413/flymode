@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { RulesTab } from './components/RulesTab';
 import { QuickActionsTab } from './components/QuickActionsTab';
 import { NotesTab } from './components/NotesTab';
@@ -331,11 +332,21 @@ export function App() {
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
+    // Notify user when a pair request arrives from another device
+    const unlistenPair = listen<PairRequest>('pair-request-received', (event) => {
+      const name = event.payload.from.device_name || 'Unknown device';
+      toast.info(
+        `"${name}" wants to pair`,
+        { label: 'Go to Devices', onClick: () => setActiveTab('p2p') },
+      );
+    });
+
     return () => {
       clearInterval(interval);
       clearInterval(syncInterval);
       clearInterval(openclawInterval);
       document.removeEventListener('visibilitychange', handleVisibility);
+      unlistenPair.then(fn => fn());
     };
   }, [loadConfig, loadStatus, loadSyncState, checkOpenclawStatus]);
 

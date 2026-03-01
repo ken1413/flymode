@@ -976,6 +976,19 @@ input[type="checkbox"] {
   word-break: break-word;
 }
 
+.toast-action {
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 3px 10px;
+}
+.toast-action:hover { background: rgba(255,255,255,0.25); }
+
 .toast-close {
   flex-shrink: 0;
   background: none;
