@@ -37,6 +37,7 @@ export function P2PTab({ openclawPeers, openclawLocalPeer, onOpenclawRefresh }: 
   const [localPasswordPrompt, setLocalPasswordPrompt] = useState(false);
   const [localPassword, setLocalPassword] = useState('');
   const discoveredRef = useRef<HTMLDivElement>(null);
+  const pairingPinRef = useRef<HTMLDivElement>(null);
   const [showTerminal, setShowTerminal] = useState(false);
   const [initialTerminalPeer, setInitialTerminalPeer] = useState<PeerDevice | null>(null);
   const [form, setForm] = useState<PeerFormData>({
@@ -123,6 +124,7 @@ export function P2PTab({ openclawPeers, openclawLocalPeer, onOpenclawRefresh }: 
     // Listen for the PIN event emitted by the backend
     const unlisten = await listen<string>('pair-pin-generated', (event) => {
       setPairingPin(event.payload);
+      setTimeout(() => pairingPinRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
     });
 
     try {
@@ -531,7 +533,7 @@ export function P2PTab({ openclawPeers, openclawLocalPeer, onOpenclawRefresh }: 
       )}
 
       {pairingPin && (
-        <div class="card" style={{ borderColor: 'var(--primary)', borderWidth: '2px', textAlign: 'center' }}>
+        <div class="card" ref={pairingPinRef} style={{ borderColor: 'var(--primary)', borderWidth: '2px', textAlign: 'center' }}>
           <div class="card-header">
             <span class="card-title">Pairing in progress...</span>
           </div>
