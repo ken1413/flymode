@@ -9,6 +9,7 @@ set -euo pipefail
 
 REPO="ken1413/flymode"
 BIN_DIR="$HOME/.local/bin"
+TMPDIR_CLEANUP=""
 
 # ── helpers ────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -77,9 +78,9 @@ fetch_release_info() {
 
 # ── download ──────────────────────────────────────────────────
 download_and_install() {
-  local tmpdir
-  tmpdir=$(mktemp -d)
-  trap 'rm -rf "$tmpdir"' EXIT
+  TMPDIR_CLEANUP=$(mktemp -d)
+  local tmpdir="$TMPDIR_CLEANUP"
+  trap 'rm -rf "$TMPDIR_CLEANUP"' EXIT
 
   if [ "$USE_APPIMAGE" = true ]; then
     install_appimage "$tmpdir"
