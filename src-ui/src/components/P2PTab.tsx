@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
+import { useState, useEffect, useCallback } from 'preact/hooks';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { PeerDevice, P2PConfig, DeviceStatus, ConnectionType, PairRequest, PairResult } from '../App';
@@ -16,7 +16,13 @@ interface PeerFormData {
   is_trusted: boolean;
 }
 
-export function P2PTab() {
+interface P2PTabProps {
+  openclawPeers: Set<string>;
+  openclawLocalPeer: PeerDevice | null;
+  onOpenclawRefresh: () => void;
+}
+
+export function P2PTab({ openclawPeers, openclawLocalPeer, onOpenclawRefresh }: P2PTabProps) {
   const [config, setConfig] = useState<P2PConfig | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingPeer, setEditingPeer] = useState<PeerDevice | null>(null);
@@ -28,8 +34,6 @@ export function P2PTab() {
   const [pairingPin, setPairingPin] = useState<string | null>(null);
   const [pinInputs, setPinInputs] = useState<Record<string, string>>({});
   const [pairSuccessName, setPairSuccessName] = useState<string | null>(null);
-  const [openclawPeers, setOpenclawPeers] = useState<Set<string>>(new Set());
-  const [localPeer, setLocalPeer] = useState<PeerDevice | null>(null);
   const [localPasswordPrompt, setLocalPasswordPrompt] = useState(false);
   const [localPassword, setLocalPassword] = useState('');
   const [showTerminal, setShowTerminal] = useState(false);
@@ -74,60 +78,6 @@ export function P2PTab() {
     }
   }, []);
 
-  // OpenClaw detection — separate from status polling to avoid heavy SSH on every cycle
-  const checkingOpenclawRef = useRef(false);
-  const checkOpenclawStatus = useCallback(async () => {
-    if (!config || checkingOpenclawRef.current) return;
-    checkingOpenclawRef.current = true;
-    try {
-      // Check local OpenClaw (no SSH, fast)
-      try {
-        const localRunning = await invoke<boolean>('check_local_openclaw');
-        if (localRunning && config) {
-          const [username, keyPath] = await invoke<[string, string | null]>('get_local_ssh_info');
-          setLocalPeer({
-            id: '__local__',
-            name: `${config.device_name} (localhost)`,
-            hostname: 'localhost',
-            ip_address: '127.0.0.1',
-            port: 22,
-            connection_type: 'LanDirect',
-            status: 'Online',
-            last_seen: null,
-            ssh_user: username,
-            ssh_key_path: keyPath,
-            ssh_password: null,
-            is_trusted: true,
-            tailscale_hostname: null,
-            flymode_version: null,
-          });
-        } else {
-          setLocalPeer(null);
-        }
-      } catch {
-        setLocalPeer(null);
-      }
-
-      // Check remote peers
-      const results = new Set<string>();
-      for (const peer of config.peers) {
-        if (peer.is_trusted && peerStatuses.get(peer.id) === 'Online') {
-          try {
-            const running = await invoke<boolean>('check_openclaw_status', { peer });
-            if (running) {
-              results.add(peer.id);
-            }
-          } catch {
-            // Silently skip — peer may not be reachable for SSH
-          }
-        }
-      }
-      setOpenclawPeers(results);
-    } finally {
-      checkingOpenclawRef.current = false;
-    }
-  }, [config, peerStatuses]);
-
   useEffect(() => {
     loadConfig();
     checkStatuses();
@@ -145,14 +95,6 @@ export function P2PTab() {
       clearInterval(pairInterval);
       unlisten.then(fn => fn());
     };
-  }, [loadConfig, checkStatuses, loadPairRequests]);
-
-  // OpenClaw check: run once after first status check, then every 120s
-  useEffect(() => {
-    if (!config || peerStatuses.size === 0) return;
-    checkOpenclawStatus();
-    const openclawInterval = setInterval(checkOpenclawStatus, 120000);
-    return () => clearInterval(openclawInterval);
   }, [config, peerStatuses, checkOpenclawStatus]);
 
   const discoverPeers = async () => {
@@ -423,12 +365,12 @@ export function P2PTab() {
       <div class="card">
         <div class="card-header">
           <span class="card-title">This Device</span>
-          {localPeer && (
+          {openclawLocalPeer && (
             <button
               class="btn-terminal"
               onClick={() => {
-                if (localPeer.ssh_key_path) {
-                  setInitialTerminalPeer(localPeer);
+                if (openclawLocalPeer.ssh_key_path) {
+                  setInitialTerminalPeer(openclawLocalPeer);
                   setShowTerminal(true);
                 } else {
                   setLocalPassword('');
@@ -634,8 +576,7 @@ export function P2PTab() {
                 class="btn btn-primary"
                 disabled={!localPassword}
                 onClick={() => {
-                  setInitialTerminalPeer({ ...localPeer, ssh_password: localPassword });
-                  setLocalPeer({ ...localPeer, ssh_password: localPassword });
+                  setInitialTerminalPeer({ ...openclawLocalPeer!, ssh_password: localPassword });
                   setLocalPasswordPrompt(false);
                   setShowTerminal(true);
                 }}
@@ -650,7 +591,7 @@ export function P2PTab() {
       {showTerminal && initialTerminalPeer && (
         <TerminalModal
           openclawPeers={[
-            ...(localPeer ? [localPeer] : []),
+            ...(openclawLocalPeer ? [openclawLocalPeer] : []),
             ...config.peers.filter(p => openclawPeers.has(p.id)),
           ]}
           initialPeer={initialTerminalPeer}

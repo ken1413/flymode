@@ -8,6 +8,7 @@ import { SyncTab } from './components/SyncTab';
 import { TransferTab } from './components/TransferTab';
 import { SettingsTab } from './components/SettingsTab';
 import { LockScreen } from './components/LockScreen';
+import { TerminalModal } from './components/TerminalModal';
 import { ToastContainer, toast } from './components/Toast';
 
 export interface ScheduleRule {
@@ -179,6 +180,13 @@ export function App() {
   const [syncState, setSyncState] = useState<SyncState | null>(null);
   const hiddenAt = useRef<number>(0);
 
+  // OpenClaw state — lifted to App level for header display
+  const [openclawPeers, setOpenclawPeers] = useState<Set<string>>(new Set());
+  const [openclawLocalPeer, setOpenclawLocalPeer] = useState<PeerDevice | null>(null);
+  const [p2pConfig, setP2pConfig] = useState<P2PConfig | null>(null);
+  const [peerStatuses, setPeerStatuses] = useState<Map<string, DeviceStatus>>(new Map());
+  const [showTerminalFromHeader, setShowTerminalFromHeader] = useState(false);
+
   const loadConfig = useCallback(async () => {
     try {
       const cfg = await invoke<AppConfig>('get_config');
@@ -208,6 +216,90 @@ export function App() {
     }
   }, []);
 
+  // Load P2P config for OpenClaw detection
+  const loadP2pConfig = useCallback(async () => {
+    try {
+      const cfg = await invoke<P2PConfig>('get_p2p_config');
+      setP2pConfig(cfg);
+      return cfg;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Check peer statuses for OpenClaw detection
+  const checkPeerStatuses = useCallback(async (peers: PeerDevice[]) => {
+    const statuses = new Map<string, DeviceStatus>();
+    for (const peer of peers) {
+      if (peer.is_trusted) {
+        try {
+          const s = await invoke<DeviceStatus>('check_peer_status', { peer });
+          statuses.set(peer.id, s);
+        } catch {
+          statuses.set(peer.id, 'Unknown');
+        }
+      }
+    }
+    setPeerStatuses(statuses);
+    return statuses;
+  }, []);
+
+  // OpenClaw detection — runs at App level so header can show node count
+  const checkingOpenclawRef = useRef(false);
+  const checkOpenclawStatus = useCallback(async () => {
+    if (checkingOpenclawRef.current) return;
+    checkingOpenclawRef.current = true;
+    try {
+      const cfg = await loadP2pConfig();
+      if (!cfg) return;
+
+      // Check local OpenClaw
+      try {
+        const localRunning = await invoke<boolean>('check_local_openclaw');
+        if (localRunning) {
+          const [username, keyPath] = await invoke<[string, string | null]>('get_local_ssh_info');
+          setOpenclawLocalPeer({
+            id: '__local__',
+            name: `${cfg.device_name} (localhost)`,
+            hostname: 'localhost',
+            ip_address: '127.0.0.1',
+            port: 22,
+            connection_type: 'LanDirect',
+            status: 'Online',
+            last_seen: null,
+            ssh_user: username,
+            ssh_key_path: keyPath,
+            ssh_password: null,
+            is_trusted: true,
+            tailscale_hostname: null,
+            flymode_version: null,
+          });
+        } else {
+          setOpenclawLocalPeer(null);
+        }
+      } catch {
+        setOpenclawLocalPeer(null);
+      }
+
+      // Check remote peers
+      const results = new Set<string>();
+      const statuses = await checkPeerStatuses(cfg.peers);
+      for (const peer of cfg.peers) {
+        if (peer.is_trusted && statuses.get(peer.id) === 'Online') {
+          try {
+            const running = await invoke<boolean>('check_openclaw_status', { peer });
+            if (running) results.add(peer.id);
+          } catch {
+            // Silently skip
+          }
+        }
+      }
+      setOpenclawPeers(results);
+    } finally {
+      checkingOpenclawRef.current = false;
+    }
+  }, [loadP2pConfig, checkPeerStatuses]);
+
   useEffect(() => {
     loadConfig().then((cfg) => {
       setLoading(false);
@@ -217,8 +309,10 @@ export function App() {
     });
     loadStatus();
     loadSyncState();
+    checkOpenclawStatus();
     const interval = setInterval(loadStatus, 5000);
     const syncInterval = setInterval(loadSyncState, 3000);
+    const openclawInterval = setInterval(checkOpenclawStatus, 120000);
 
     // Lock when window is restored from tray (hidden → visible)
     const handleVisibility = () => {
@@ -242,9 +336,10 @@ export function App() {
     return () => {
       clearInterval(interval);
       clearInterval(syncInterval);
+      clearInterval(openclawInterval);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [loadConfig, loadStatus, loadSyncState]);
+  }, [loadConfig, loadStatus, loadSyncState, checkOpenclawStatus]);
 
   const saveConfig = async (cfg: AppConfig) => {
     await invoke('save_config', { config: cfg });
@@ -274,35 +369,47 @@ export function App() {
     );
   }
 
+  const openclawNodeCount = (openclawLocalPeer ? 1 : 0) + openclawPeers.size;
+  const openclawAllPeers = [
+    ...(openclawLocalPeer ? [openclawLocalPeer] : []),
+    ...(p2pConfig?.peers.filter(p => openclawPeers.has(p.id)) || []),
+  ];
+
   return (
     <div class="container">
       <ToastContainer />
       <header>
-        <h1>FlyMode</h1>
-        <div class="header-status">
-          <span style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
-            Wireless + Sync
-          </span>
+        <div class="header-left">
+          <h1>FlyMode</h1>
+        </div>
+        <div class="header-right">
+          {openclawNodeCount > 0 && (
+            <button
+              class="openclaw-btn"
+              onClick={() => setShowTerminalFromHeader(true)}
+              title={`${openclawNodeCount} OpenClaw node${openclawNodeCount > 1 ? 's' : ''} available`}
+            >
+              <span class="openclaw-dot" />
+              {'>_'} OpenClaw
+              <span class="openclaw-count">{openclawNodeCount}</span>
+            </button>
+          )}
+          <div class="wireless-chips">
+            <span class={`chip ${status?.wifi_enabled ? 'chip-on' : 'chip-off'}`} title={status?.wifi_enabled ? 'WiFi On' : 'WiFi Off'}>
+              {status?.wifi_enabled ? '📶' : '📵'}
+            </span>
+            <span class={`chip ${status?.bluetooth_enabled ? 'chip-on' : 'chip-off'}`} title={status?.bluetooth_enabled ? 'Bluetooth On' : 'Bluetooth Off'}>
+              {status?.bluetooth_enabled ? '🟦' : '⬛'}
+            </span>
+            {status?.airplane_mode && (
+              <span class="chip chip-warn" title="Airplane Mode On">✈️</span>
+            )}
+          </div>
           {syncState?.status === 'Syncing' && (
             <span class="sync-indicator">Syncing...</span>
           )}
         </div>
       </header>
-
-      <div class="status-bar">
-        <div class="status-item">
-          <span class={`status-dot ${status?.wifi_enabled ? 'on' : 'off'}`} />
-          <span>WiFi</span>
-        </div>
-        <div class="status-item">
-          <span class={`status-dot ${status?.bluetooth_enabled ? 'on' : 'off'}`} />
-          <span>BT</span>
-        </div>
-        <div class="status-item">
-          <span class={`status-dot ${status?.airplane_mode ? 'on' : 'off'}`} />
-          <span>Air</span>
-        </div>
-      </div>
 
       <div class="tabs">
         {tabs.map(tab => (
@@ -320,10 +427,24 @@ export function App() {
       {activeTab === 'rules' && config && <RulesTab config={config} onSave={saveConfig} />}
       {activeTab === 'quick' && <QuickActionsTab />}
       {activeTab === 'notes' && <NotesTab />}
-      {activeTab === 'p2p' && <P2PTab />}
+      {activeTab === 'p2p' && (
+        <P2PTab
+          openclawPeers={openclawPeers}
+          openclawLocalPeer={openclawLocalPeer}
+          onOpenclawRefresh={checkOpenclawStatus}
+        />
+      )}
       {activeTab === 'sync' && <SyncTab />}
       {activeTab === 'transfer' && <TransferTab />}
       {activeTab === 'settings' && config && <SettingsTab config={config} onSave={saveConfig} />}
+
+      {showTerminalFromHeader && openclawAllPeers.length > 0 && (
+        <TerminalModal
+          openclawPeers={openclawAllPeers}
+          initialPeer={openclawAllPeers[0]}
+          onClose={() => setShowTerminalFromHeader(false)}
+        />
+      )}
     </div>
   );
 }

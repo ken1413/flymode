@@ -36,40 +36,61 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
 }
 
+.header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
 h1 {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 600;
 }
 
-.status-bar {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 24px;
+.header-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
-.status-item {
-  background: var(--bg-card);
-  padding: 12px 16px;
-  border-radius: 8px;
+.header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex: 1;
+  gap: 12px;
 }
 
-.status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+.wireless-chips {
+  display: flex;
+  gap: 4px;
 }
 
-.status-dot.on { background: var(--success); }
-.status-dot.off { background: var(--danger); }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.chip-on {
+  background: rgba(34, 197, 94, 0.15);
+}
+
+.chip-off {
+  background: rgba(239, 68, 68, 0.15);
+  opacity: 0.5;
+}
+
+.chip-warn {
+  background: rgba(245, 158, 11, 0.2);
+}
 
 .tabs {
   display: flex;
@@ -367,10 +388,48 @@ select.form-control option {
   color: var(--text-muted);
 }
 
-.header-status {
-  display: flex;
+/* ── OpenClaw Header Button ────────────────────────────────── */
+
+.openclaw-btn {
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 8px;
+  color: var(--success);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: monospace;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.openclaw-btn:hover {
+  background: rgba(34, 197, 94, 0.22);
+  border-color: var(--success);
+}
+
+.openclaw-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  animation: pulse 2s infinite;
+}
+
+.openclaw-count {
+  background: var(--success);
+  color: var(--bg);
+  font-size: 11px;
+  font-weight: 700;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .sync-indicator {
