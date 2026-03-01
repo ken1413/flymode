@@ -544,7 +544,7 @@ export function P2PTab({ openclawPeers, openclawLocalPeer, onOpenclawRefresh }: 
         </div>
       )}
 
-      {localPasswordPrompt && localPeer && (
+      {localPasswordPrompt && openclawLocalPeer && (
         <div class="modal-overlay" onClick={() => setLocalPasswordPrompt(false)}>
           <div class="modal" style={{ maxWidth: '360px' }} onClick={e => e.stopPropagation()}>
             <div class="modal-header">
@@ -552,7 +552,7 @@ export function P2PTab({ openclawPeers, openclawLocalPeer, onOpenclawRefresh }: 
               <button class="modal-close" onClick={() => setLocalPasswordPrompt(false)}>×</button>
             </div>
             <div class="form-group">
-              <label>Password for {localPeer.ssh_user}@127.0.0.1</label>
+              <label>Password for {openclawLocalPeer.ssh_user}@127.0.0.1</label>
               <input
                 type="password"
                 class="form-control"
@@ -560,8 +560,7 @@ export function P2PTab({ openclawPeers, openclawLocalPeer, onOpenclawRefresh }: 
                 onInput={e => setLocalPassword(e.currentTarget.value)}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && localPassword) {
-                    setInitialTerminalPeer({ ...localPeer, ssh_password: localPassword });
-                    setLocalPeer({ ...localPeer, ssh_password: localPassword });
+                    setInitialTerminalPeer({ ...openclawLocalPeer, ssh_password: localPassword });
                     setLocalPasswordPrompt(false);
                     setShowTerminal(true);
                   }
