@@ -1,6 +1,6 @@
 [package]
 name = "flymode"
-version = "0.3.0"
+version = "0.3.1"
 description = "Wireless scheduler + P2P sync + Notes - control WiFi/Bluetooth, sync files/notes across devices"
 authors = ["you"]
 edition = "2021"
