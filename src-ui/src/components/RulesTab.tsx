@@ -100,15 +100,13 @@ export function RulesTab({ config, onSave }: { config: AppConfig; onSave: (c: Ap
       } else {
         await invoke('add_rule', { rule });
       }
-      const newConfig = { ...config };
       if (editingRule) {
-        newConfig.rules = newConfig.rules.map(r => r.id === rule.id ? rule : r);
+        onSave({ ...config, rules: config.rules.map(r => r.id === rule.id ? rule : r) });
       } else {
         const freshConfig = await invoke<AppConfig>('get_config');
         const added = freshConfig.rules[freshConfig.rules.length - 1];
-        newConfig.rules.push(added);
+        onSave({ ...config, rules: [...config.rules, added] });
       }
-      onSave(newConfig);
       setShowModal(false);
     } catch (e) {
       toast.error('Failed to save rule');
@@ -117,10 +115,10 @@ export function RulesTab({ config, onSave }: { config: AppConfig; onSave: (c: Ap
 
   const handleToggle = async (ruleId: string) => {
     await invoke('toggle_rule', { ruleId });
-    const newConfig = { ...config };
-    const rule = newConfig.rules.find(r => r.id === ruleId);
-    if (rule) rule.enabled = !rule.enabled;
-    onSave(newConfig);
+    onSave({
+      ...config,
+      rules: config.rules.map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r),
+    });
   };
 
   const handleDelete = async (ruleId: string) => {

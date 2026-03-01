@@ -184,7 +184,6 @@ export function App() {
   const [openclawPeers, setOpenclawPeers] = useState<Set<string>>(new Set());
   const [openclawLocalPeer, setOpenclawLocalPeer] = useState<PeerDevice | null>(null);
   const [p2pConfig, setP2pConfig] = useState<P2PConfig | null>(null);
-  const [peerStatuses, setPeerStatuses] = useState<Map<string, DeviceStatus>>(new Map());
   const [showTerminalFromHeader, setShowTerminalFromHeader] = useState(false);
 
   const loadConfig = useCallback(async () => {
@@ -240,7 +239,6 @@ export function App() {
         }
       }
     }
-    setPeerStatuses(statuses);
     return statuses;
   }, []);
 

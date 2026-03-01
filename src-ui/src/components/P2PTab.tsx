@@ -95,7 +95,7 @@ export function P2PTab({ openclawPeers, openclawLocalPeer, onOpenclawRefresh }: 
       clearInterval(pairInterval);
       unlisten.then(fn => fn());
     };
-  }, [config, peerStatuses, checkOpenclawStatus]);
+  }, [loadConfig, checkStatuses, loadPairRequests]);
 
   const discoverPeers = async () => {
     setDiscovering(true);
@@ -261,6 +261,7 @@ export function P2PTab({ openclawPeers, openclawLocalPeer, onOpenclawRefresh }: 
       }
       await loadConfig();
       setShowModal(false);
+      onOpenclawRefresh();
     } catch (e) {
       toast.error('Failed to save peer: ' + e);
     }
@@ -271,6 +272,7 @@ export function P2PTab({ openclawPeers, openclawLocalPeer, onOpenclawRefresh }: 
     try {
       await invoke('remove_peer', { peerId });
       await loadConfig();
+      onOpenclawRefresh();
     } catch (e) {
       toast.error('Failed to remove peer');
     }
@@ -281,6 +283,7 @@ export function P2PTab({ openclawPeers, openclawLocalPeer, onOpenclawRefresh }: 
     try {
       await invoke('update_peer', { peer: updated });
       await loadConfig();
+      onOpenclawRefresh();
     } catch (e) {
       toast.error('Failed to toggle trust');
     }
