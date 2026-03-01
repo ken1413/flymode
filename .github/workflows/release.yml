@@ -46,14 +46,19 @@ jobs:
       - name: Build
         run: cargo tauri build
 
-      - name: Upload artifacts
+      - name: Collect release files
+        run: |
+          mkdir -p release-files
+          find target/release/bundle -type f \( -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) -exec cp {} release-files/ \;
+          echo "=== Release files ==="
+          ls -lh release-files/
+
+      - name: Upload release files
         uses: actions/upload-artifact@v4
         with:
-          name: linux-artifacts
-          path: |
-            target/release/bundle/deb/*.deb
-            target/release/bundle/appimage/*.AppImage
-            target/release/bundle/rpm/*.rpm
+          name: release-files
+          path: release-files/*
+          if-no-files-found: error
 
   release:
     needs: [build-linux]
@@ -61,16 +66,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download artifacts
+      - name: Download release files
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          name: release-files
+          path: release-files
 
-      - name: Flatten artifacts
-        run: |
-          mkdir -p release-files
-          find artifacts -type f \( -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) -exec cp {} release-files/ \;
-          ls -lh release-files/
+      - name: List release files
+        run: ls -lh release-files/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
