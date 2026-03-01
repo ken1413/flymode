@@ -4,7 +4,7 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/install.sh | bash -s -- --appimage
+#   curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/install.sh | bash -s -- --deb
 set -euo pipefail
 
 REPO="ken1413/flymode"
@@ -22,14 +22,15 @@ fail()  { echo -e "${RED}[FAIL]${NC}  $*"; exit 1; }
 need_cmd() { command -v "$1" &>/dev/null; }
 
 # ── parse args ────────────────────────────────────────────────
-USE_APPIMAGE=false
+USE_APPIMAGE=true
 for arg in "$@"; do
   case "$arg" in
-    --appimage) USE_APPIMAGE=true ;;
+    --deb) USE_APPIMAGE=false ;;
     --help|-h)
-      echo "Usage: install.sh [--appimage]"
+      echo "Usage: install.sh [--deb]"
       echo ""
-      echo "  --appimage   Install AppImage instead of .deb (no sudo needed)"
+      echo "  Default:  AppImage install to ~/.local/bin (no sudo needed)"
+      echo "  --deb     Install .deb system package instead (requires sudo)"
       echo ""
       exit 0
       ;;
