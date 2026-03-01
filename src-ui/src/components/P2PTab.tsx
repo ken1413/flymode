@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'preact/hooks';
+import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { PeerDevice, P2PConfig, DeviceStatus, ConnectionType, PairRequest, PairResult } from '../App';
@@ -36,6 +36,7 @@ export function P2PTab({ openclawPeers, openclawLocalPeer, onOpenclawRefresh }: 
   const [pairSuccessName, setPairSuccessName] = useState<string | null>(null);
   const [localPasswordPrompt, setLocalPasswordPrompt] = useState(false);
   const [localPassword, setLocalPassword] = useState('');
+  const discoveredRef = useRef<HTMLDivElement>(null);
   const [showTerminal, setShowTerminal] = useState(false);
   const [initialTerminalPeer, setInitialTerminalPeer] = useState<PeerDevice | null>(null);
   const [form, setForm] = useState<PeerFormData>({
@@ -106,6 +107,7 @@ export function P2PTab({ openclawPeers, openclawLocalPeer, onOpenclawRefresh }: 
         toast.info('No new Tailscale peers found');
       } else {
         toast.success(`Found ${peers.length} Tailscale peer(s)`);
+        setTimeout(() => discoveredRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
       }
     } catch (e) {
       toast.error('Failed to discover peers: ' + e);
@@ -472,7 +474,7 @@ export function P2PTab({ openclawPeers, openclawLocalPeer, onOpenclawRefresh }: 
       </div>
 
       {discoveredPeers.length > 0 && (
-        <div class="card">
+        <div class="card" ref={discoveredRef}>
           <div class="card-header">
             <span class="card-title">Discovered via Tailscale ({discoveredPeers.length})</span>
             <button class="btn btn-icon btn-sm" onClick={() => setDiscoveredPeers([])}>×</button>
