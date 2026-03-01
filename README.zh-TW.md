@@ -9,9 +9,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ken1413/flymode/releases/latest"><img src="https://img.shields.io/github/v/release/ken1413/flymode?style=flat-square&color=blue" alt="Release" /></a>
-  <a href="https://github.com/ken1413/flymode/blob/main/LICENSE"><img src="https://img.shields.io/github/license/ken1413/flymode?style=flat-square" alt="License" /></a>
-  <a href="https://github.com/ken1413/flymode/releases"><img src="https://img.shields.io/github/downloads/ken1413/flymode/total?style=flat-square&color=green" alt="Downloads" /></a>
+  <a href="https://github.com/ken1413/flymode/releases/latest"><img src="https://img.shields.io/github/v/release/ken1413/flymode?style=flat-square&color=blue&v=2" alt="Release" /></a>
+  <a href="https://github.com/ken1413/flymode/blob/main/LICENSE"><img src="https://img.shields.io/github/license/ken1413/flymode?style=flat-square&v=2" alt="License" /></a>
+  <a href="https://github.com/ken1413/flymode/releases"><img src="https://img.shields.io/github/downloads/ken1413/flymode/total?style=flat-square&color=green&v=2" alt="Downloads" /></a>
 </p>
 
 <p align="center">
@@ -466,7 +466,7 @@ ssh-copy-id youruser@machine-a-ip       # 複製公鑰到電腦 A
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        FlyMode v0.3.0                           │
+│                        FlyMode v0.3.1                           │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  ┌─────────────── 前端 (Preact + TypeScript) ─────────────────┐ │
