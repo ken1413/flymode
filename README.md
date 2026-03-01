@@ -263,18 +263,18 @@ Plus a command runner: type any shell command and execute it immediately with ou
 
 ### Pre-Built Package (Recommended)
 
-Download and install in one command — **no Rust or Node.js required**:
+Download and install in one command — **no Rust or Node.js required, no sudo needed**:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/install.sh | bash
 ```
 
-The installer automatically detects your distro and installs the appropriate format (`.deb`, `.rpm`, or `.AppImage`).
+Installs an AppImage to `~/.local/bin/flymode`. No root privileges required.
 
-For AppImage specifically (no sudo needed):
+For system-wide `.deb` installation instead (requires sudo):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/install.sh | bash -s -- --appimage
+curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/install.sh | bash -s -- --deb
 ```
 
 Then launch:

@@ -263,18 +263,18 @@ FlyMode 使用 **Last-Write-Wins (LWW)** 衝突解決機制：
 
 ### 預編譯套件（推薦）
 
-一行指令下載安裝 — **不需要 Rust 或 Node.js 環境**：
+一行指令下載安裝 — **不需要 Rust 或 Node.js，不需要 sudo**：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/install.sh | bash
 ```
 
-安裝腳本會自動偵測你的發行版，安裝對應格式（`.deb`、`.rpm`、或 `.AppImage`）。
+安裝 AppImage 到 `~/.local/bin/flymode`，不需要 root 權限。
 
-使用 AppImage（免 sudo）：
+如需系統層級 `.deb` 安裝（需要 sudo）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/install.sh | bash -s -- --appimage
+curl -fsSL https://raw.githubusercontent.com/ken1413/flymode/main/install.sh | bash -s -- --deb
 ```
 
 安裝完成後啟動：
