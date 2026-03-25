@@ -50,6 +50,10 @@ Single-binary Rust app with four modules:
 | Config | `%APPDATA%/timewaver-monitor/config.json` |
 | Logs | `%LOCALAPPDATA%/timewaver-monitor/logs/` |
 
+## Git Commit Rules
+
+- Never include `Co-Authored-By` lines in commit messages.
+
 ## Default Monitored Process
 
 `C:\Program Files (x86)\TimeWaverPro\TwPro.exe` — configurable via `config.json`.

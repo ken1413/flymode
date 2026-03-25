@@ -172,7 +172,15 @@ pub fn spawn_monitor_thread(
                 }
             }
 
-            thread::sleep(Duration::from_secs(interval));
+            let sleep_secs = {
+                let st = status.lock().unwrap();
+                if !st.target_running && st.last_check.is_some() {
+                    15 // check more frequently when process is down
+                } else {
+                    interval
+                }
+            };
+            thread::sleep(Duration::from_secs(sleep_secs));
         }
     })
 }
