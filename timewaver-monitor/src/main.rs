@@ -105,8 +105,40 @@ fn init_logging(config: &Config) {
     }
 }
 
+fn ensure_single_instance() {
+    #[cfg(windows)]
+    {
+        use std::ptr;
+        const MUTEX_NAME: &str = "Global\\TimeWaverMonitor_SingleInstance\0";
+        let name: Vec<u8> = MUTEX_NAME.bytes().collect();
+        unsafe {
+            let handle = windows_sys::Win32::System::Threading::CreateMutexA(
+                ptr::null(),
+                1, // bInitialOwner = TRUE
+                name.as_ptr(),
+            );
+            let err = windows_sys::Win32::Foundation::GetLastError();
+            // ERROR_ALREADY_EXISTS = 183
+            if handle.is_null() || err == 183 {
+                eprintln!("TimeWaver Monitor is already running.");
+                std::process::exit(0);
+            }
+            // Keep the handle alive for the entire process lifetime
+            let _ = handle;
+        }
+    }
+}
+
 fn main() {
-    let config = Config::load();
+    ensure_single_instance();
+
+    let mut config = Config::load();
+
+    if !config.resolve_target_exe() {
+        eprintln!("Cannot start without a valid target executable. Exiting.");
+        std::process::exit(1);
+    }
+
     println!(
         "TimeWaver Monitor v0.1.0\n  Target: {}\n  Check interval: {}s\n  Config: {}\n  Logs: {}",
         config.target_exe,

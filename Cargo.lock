@@ -5522,6 +5522,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "tray-icon 0.19.3",
+ "windows-sys 0.59.0",
  "winit",
  "winreg 0.52.0",
 ]
