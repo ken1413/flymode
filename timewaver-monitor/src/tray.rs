@@ -2,7 +2,7 @@
 
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu, CheckMenuItem};
 use tray_icon::TrayIconBuilder;
-use tray_icon::icon::Icon;
+use tray_icon::Icon;
 use tracing::{error, info};
 
 use crate::config::Config;

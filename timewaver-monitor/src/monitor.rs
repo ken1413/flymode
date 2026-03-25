@@ -44,10 +44,10 @@ pub fn is_process_running(target_exe: &str) -> bool {
         .to_lowercase();
 
     let mut sys = System::new();
-    sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+    sys.refresh_processes();
 
     for (_pid, process) in sys.processes() {
-        let proc_name = process.name().to_string_lossy().to_lowercase();
+        let proc_name = process.name().to_lowercase();
         if proc_name == target_name {
             if let Some(exe_path) = process.exe() {
                 let exe_str = exe_path.to_string_lossy().to_lowercase();
